@@ -14,6 +14,7 @@ from config import (
     SCENARIO_OPTIONS,
 )
 from data_defaults import get_default_lump_events, get_default_recurring_events
+from simulator import FinancialSimulator
 from utils import format_won, calc_rolling_stats
 
 # -----------------------------------------------------------
