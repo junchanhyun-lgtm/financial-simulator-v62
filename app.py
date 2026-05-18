@@ -13,6 +13,7 @@ from config import (
     DEFAULT_SCENARIO_INDEX,
     SCENARIO_OPTIONS,
 )
+from data_defaults import get_default_lump_events, get_default_recurring_events
 from utils import format_won, calc_rolling_stats
 
 # -----------------------------------------------------------
@@ -332,23 +333,16 @@ def main():
             current_asset = st.number_input("현재 금융자산 (만원)", 0, value=97000, step=100, key='in_asset', help="대출이 포함된 총 운용 자산입니다. 기대수익률은 대출이자 및 제세금이 블렌딩된 수치로 간주합니다.")
 
             st.markdown("###### ⚔️ 포트폴리오 통합 시나리오 선택")
-
-            # (은퇴전 수익률, 은퇴전 변동성, 은퇴후 수익률, 은퇴후 변동성)
-            scenario_options = {
-                "시나리오 1: 기본 (은퇴전 21.1% ➡️ 은퇴후 15.8%)": (21.11, 18.13, 15.83, 12.71),
-                "시나리오 2: 10% 보수적 (은퇴전 19.3% ➡️ 은퇴후 14.5%)": (19.28, 18.13, 14.55, 12.71),
-                "시나리오 3: 20% 보수적 (은퇴전 17.4% ➡️ 은퇴후 13.3%)": (17.44, 18.13, 13.26, 12.71),
-                "시나리오 4: 30% 보수적 (은퇴전 15.6% ➡️ 은퇴후 12.0%)": (15.61, 18.13, 11.98, 12.71)
-            }
+                     
             selected_scenario = st.selectbox(
                 "성장-방어 통합 궤적 선택",
-                list(scenario_options.keys()),
-                index=3,
+                list(SCENARIO_OPTIONS.keys()),
+                index=DEFAULT_SCENARIO_INDEX,
                 help="은퇴 전 수익률 타겟을 선택하면 은퇴 후 안전자산 30% 편입 비율이 자동 연산되어 하드코딩됩니다."
             )
 
             # 시나리오에 따른 4가지 변수 자동 할당
-            expected_return_pre, vol_pre, expected_return_post, vol_post = scenario_options[selected_scenario]
+            expected_return_pre, vol_pre, expected_return_post, vol_post = SCENARIO_OPTIONS[selected_scenario]
 
             st.markdown("###### 🛡️ 은퇴 후 (방어형 자동 스위칭)")
             st.info(f"👉 해당 시나리오 적용 시, 은퇴 후 기대수익률은 **{expected_return_post}%**, 변동성은 **{vol_post}%**로 자동 하강(Glide-Path) 적용됩니다. (안전자산 30% 블렌딩)")
@@ -374,28 +368,14 @@ def main():
 
     with tab1:
         if 'lump_df' not in st.session_state:
-            st.session_state.lump_df = pd.DataFrame([
-                {"나이": 41, "유형": "지출", "내용": "대출상환", "금액(만원)": 10000},
-                {"나이": 41, "유형": "지출", "내용": "증여", "금액(만원)": 2000},
-                {"나이": 50, "유형": "지출", "내용": "주택구입", "금액(만원)": 32000},
-                {"나이": 51, "유형": "지출", "내용": "증여", "금액(만원)": 2000},
-                {"나이": 61, "유형": "지출", "내용": "증여", "금액(만원)": 5000},
-                {"나이": 71, "유형": "지출", "내용": "증여", "금액(만원)": 5000}
-            ])
+            st.session_state.lump_df = get_default_lump_events()               
         edited_lump_df = st.data_editor(st.session_state.lump_df, num_rows="dynamic", use_container_width=True,
                                         column_config={"유형": st.column_config.SelectboxColumn("유형", options=["수입", "지출"])})
         clean_lump_df = edited_lump_df.dropna(subset=['나이', '유형', '금액(만원)'])
 
     with tab2:
         if 'recur_df' not in st.session_state:
-            st.session_state.recur_df = pd.DataFrame([
-                {"시작나이": 40, "기간(년)": 20, "유형": "지출", "내용": "부모님용돈", "월금액(만원)": 100, "확정연금": False, "물가연동": False},
-                {"시작나이": 40, "기간(년)": 10, "유형": "수입", "내용": "주6일 초과근무", "월금액(만원)": 200, "확정연금": False, "물가연동": False},
-                {"시작나이": 47, "기간(년)": 5, "유형": "지출", "내용": "자동차 할부금", "월금액(만원)": 250, "확정연금": False, "물가연동": False},
-                {"시작나이": 60, "기간(년)": 30, "유형": "지출", "내용": "지역 건보료 폭탄", "월금액(만원)": 50, "확정연금": False, "물가연동": True},
-                {"시작나이": 70, "기간(년)": 20, "유형": "수입", "내용": "국민연금", "월금액(만원)": 100, "확정연금": True, "물가연동": True},
-                {"시작나이": 70, "기간(년)": 20, "유형": "수입", "내용": "주택연금", "월금액(만원)": 100, "확정연금": True, "물가연동": True}
-            ])
+            st.session_state.recur_df = get_default_recurring_events()
         edited_recur_df = st.data_editor(st.session_state.recur_df, num_rows="dynamic", use_container_width=True,
                                          column_config={"유형": st.column_config.SelectboxColumn("유형", options=["수입", "지출"]),
                                                         "확정연금": st.column_config.CheckboxColumn("확정연금", help="주가에 상관없이 평생 지급되는 안정적 수입"),
@@ -404,7 +384,7 @@ def main():
 
     if st.button("🚀 5,000회 연산 및 정밀 스트레스 테스트 시작", type="primary", use_container_width=True):
         st.divider()
-        n_sims = 5000
+        n_sims = N_SIMULATIONS
         params = {
             'current_age': current_age, 'death_age': death_age, 'current_asset': current_asset,
             'monthly_income': monthly_income, 'apply_income_inflation': apply_income_inflation,
@@ -421,8 +401,11 @@ def main():
 
         with st.spinner("복합 조세 모듈 및 글라이드 패스 연산 수행 중..."):
             simulator = FinancialSimulator(params)
-            years, main_pv, main_nom, main_returns, safe_extra, base_ruin, stress_df, t_ruin = simulator.run_hybrid_analysis(main_sims=n_sims, search_sims=500)
-            sens_df = simulator.run_sensitivity(base_ruin, sims=2000)
+            years, main_pv, main_nom, main_returns, safe_extra, base_ruin, stress_df, t_ruin = simulator.run_hybrid_analysis(
+                main_sims=n_sims,
+                search_sims=SEARCH_SIMULATIONS,
+            )
+            sens_df = simulator.run_sensitivity(base_ruin, sims=SENSITIVITY_SIMULATIONS)
 
             total_pension = 0
             if '확정연금' in clean_recur_df.columns:
