@@ -3,6 +3,16 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+from config import (
+    PAGE_TITLE,
+    MAIN_TITLE,
+    UPDATE_MESSAGE,
+    N_SIMULATIONS,
+    SEARCH_SIMULATIONS,
+    SENSITIVITY_SIMULATIONS,
+    DEFAULT_SCENARIO_INDEX,
+    SCENARIO_OPTIONS,
+)
 from utils import format_won, calc_rolling_stats
 
 # -----------------------------------------------------------
@@ -277,7 +287,7 @@ class FinancialSimulator:
 # 3. Streamlit UI (V59 Final)
 # -----------------------------------------------------------
 def main():
-    st.set_page_config(layout="wide", page_title="My Quant Asset Sim (V59)")
+    st.set_page_config(layout="wide", page_title=PAGE_TITLE)
 
     st.markdown("""
         <style>
@@ -290,8 +300,8 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("💰 전담 퀀트 금융자산 종합 관리 시스템 (V59)")
-    st.info("💡 V59 업데이트: 은퇴 전/후 수익률 통합 시나리오 선택 로직 적용 (70:30 안전자산 블렌딩 자동화)")
+    st.title(MAIN_TITLE)
+    st.info(UPDATE_MESSAGE)
     st.markdown("---")
 
     c1, c2, c3 = st.columns(3)
