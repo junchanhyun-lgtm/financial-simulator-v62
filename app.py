@@ -27,6 +27,7 @@ from ui_results import (
     render_stress_budget_section,
     render_main_asset_path_section,
     render_sensitivity_section,
+    render_engine_notes_section,
 )
 
 # -----------------------------------------------------------
@@ -402,7 +403,7 @@ def main():
             )
 
             render_sensitivity_section(sens_df)
-            
+
         with d_col:
             with st.container(border=True):
                 st.subheader("💡 퀀트 코어 엔진: V59 튜닝 로직")

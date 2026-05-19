@@ -283,4 +283,23 @@ def render_sensitivity_section(sens_df):
     )
 
     with st.container(border=True):
-        st.plotly_chart(fig_torn, use_container_width=True)              
+        st.plotly_chart(fig_torn, use_container_width=True)       
+def render_engine_notes_section(defense_rate):
+    with st.container(border=True):
+        st.subheader("💡 퀀트 코어 엔진: V59 튜닝 로직")
+        st.info(f"""
+        **1. 자산 평가 및 연금 방어율 (PV Discounting)**
+        모든 시뮬레이션 결과값은 인플레이션을 역산한 **'현재 체감 구매력'**입니다. 현재 월 필수 지출 대비 확정 연금(국민/주택)의 방어율은 **{defense_rate:.1f}%**입니다.
+
+        **2. 자동 글라이드 패스 & 7:3 블렌딩**
+        사용자가 선택한 통합 시나리오에 따라, 은퇴 시점에 도달하면 계좌 내 **안전자산(채권 등)의 비중이 30%로 자동 증가**하며 기대수익률과 변동성이 시스템 룰에 맞춰 동시에 하강합니다.
+
+        **3. 기계적 매매 마찰 비용 (Slippage Decay)**
+        수익률 모델링과 별개로, 자산 규모가 10억 원을 초과할 때마다 연 4회 리밸런싱에서 발생하는 호가 스프레드 비용을 수식(`0.015 * log10(자산/10억)`)에 따라 매년 자산에서 확정 삭감합니다.
+
+        **4. 상하방 평균 회귀 (Mean Reversion - 10%)**
+        자본 시장의 중력을 모사한 자기회귀(AR-1) 모델이 적용되었습니다. 전년도 시장이 폭등/폭락하면, 다음 해의 기대수익률은 기계적으로 역방향(10%)으로 끌어당겨집니다.
+
+        **5. 다단계 생존 본능 (Dynamic Withdrawal)**
+        계좌 잔고가 아닌 순수 시장 주가지수가 전고점 대비 5% 하락할 때마다 사치(YOLO) 지출을 20%씩 강제 삭감합니다.
+        """)               
