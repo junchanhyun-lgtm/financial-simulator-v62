@@ -19,6 +19,13 @@ from ui_inputs import render_input_panel
 from utils import format_won, calc_rolling_stats
 from params_builder import build_simulation_params
 from ui_layout import render_page_layout
+from simulation_runner import run_simulation_analysis
+from result_state import build_sim_results_state
+from ui_results import (
+    render_rolling_window_section,
+    render_representative_paths_section,
+    render_stress_budget_section,
+)
 
 # -----------------------------------------------------------
 # 2. 퀀트 시뮬레이션 코어 엔진 (V59)
@@ -307,21 +314,25 @@ def main():
         st.divider()
         n_sims = N_SIMULATIONS
         params = build_simulation_params(input_values)
-            
+
         with st.spinner("복합 조세 모듈 및 글라이드 패스 연산 수행 중..."):
-            simulator = FinancialSimulator(params)
-            years, main_pv, main_nom, main_returns, safe_extra, base_ruin, stress_df, t_ruin = simulator.run_hybrid_analysis(
-                main_sims=n_sims,
+            analysis = run_simulation_analysis(
+                params=params,
+                main_sims=N_SIMULATIONS,
                 search_sims=SEARCH_SIMULATIONS,
+                sensitivity_sims=SENSITIVITY_SIMULATIONS,
             )
-            sens_df = simulator.run_sensitivity(base_ruin, sims=SENSITIVITY_SIMULATIONS)
 
-            total_pension = 0
-            if '확정연금' in clean_recur_df.columns:
-                pension_df = clean_recur_df[(clean_recur_df['유형'] == '수입') & (clean_recur_df['확정연금'] == True)]
-                total_pension = pension_df['월금액(만원)'].sum()
-            defense_rate = (total_pension / monthly_expense * 100) if monthly_expense > 0 else 0
-
+            years = analysis["years"]
+            main_pv = analysis["main_pv"]
+            main_nom = analysis["main_nom"]
+            main_returns = analysis["main_returns"]
+            safe_extra = analysis["safe_extra"]
+            base_ruin = analysis["base_ruin"]
+            stress_df = analysis["stress_df"]
+            sens_df = analysis["sens_df"]
+            t_ruin = analysis["t_ruin"]
+            defense_rate = analysis["defense_rate"]
             st.info("💡 **[가치 평가 기준]** 본 시뮬레이터의 모든 결괏값은 인플레이션을 역산한 **'현재 체감 구매력(Present Value)'** 기준으로 완벽히 변환되어 표시됩니다.")
 
             if safe_extra > 0:
@@ -334,13 +345,22 @@ def main():
             else:
                 st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({t_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")
 
-            st.session_state['sim_results'] = {
-                'years': years, 'pv': main_pv, 'nom': main_nom, 'returns': main_returns,
-                'n_sims': n_sims, 'safe_extra': safe_extra, 'base_ruin': base_ruin,
-                'stress_df': stress_df, 'sens_df': sens_df,
-                'dwz_mode': dwz_mode, 't_ruin': t_ruin, 'defense_rate': defense_rate, 'lump_df': clean_lump_df,
-                'retire_age': retire_age
-            }
+            st.session_state["sim_results"] = build_sim_results_state(
+                years=years,
+                main_pv=main_pv,
+                main_nom=main_nom,
+                main_returns=main_returns,
+                n_sims=n_sims,
+                safe_extra=safe_extra,
+                base_ruin=base_ruin,
+                stress_df=stress_df,
+                sens_df=sens_df,
+                dwz_mode=dwz_mode,
+                t_ruin=t_ruin,
+                defense_rate=defense_rate,
+                clean_lump_df=clean_lump_df,
+                retire_age=retire_age,
+            )
 
     if 'sim_results' in st.session_state:
         res = st.session_state['sim_results']
@@ -350,66 +370,25 @@ def main():
         res_lump_df = res['lump_df']
         tgt_retire = res['retire_age']
 
-        final_assets = sim_assets_pv[:, -1]
-        top10_idx = np.abs(final_assets - np.percentile(final_assets, 90)).argmin()
-        median_idx = np.abs(final_assets - np.percentile(final_assets, 50)).argmin()
-        bot10_idx = np.abs(final_assets - np.percentile(final_assets, 10)).argmin()
+        render_rolling_window_section(sim_returns)
 
-        with st.expander(f"⏳ [멘탈 방어] 구간별 승률(Rolling Window)", expanded=False):
-            st.markdown("###### 📊 우주를 분석한 '보유 기간별' 시스템 승률 (평균회귀 10% 작용)")
-            c_r1, c_r2, c_r3, c_r4 = st.columns(4)
-            r_windows = [1, 3, 5, 10]
-            r_cols = [c_r1, c_r2, c_r3, c_r4]
-            for r_w, r_c in zip(r_windows, r_cols):
-                w_rate, m_cagr = calc_rolling_stats(sim_returns, r_w)
-                r_c.metric(f"{r_w}년 유지 시 승률", f"{w_rate:.1f}%", f"해당 구간 연평균: {m_cagr:.2f}%", delta_color="off")
-            st.caption("※ 평균 회귀(Mean Reversion) 로직이 탑재되어, 기간이 길어질수록 수익률이 기댓값에 수렴합니다. (강도: 10%)")
-
-        paths = {
-            "상위 10% (운수 좋은 날)": {"ret": sim_returns[top10_idx, :], "pv": sim_assets_pv[top10_idx, :]},
-            "중간값 (가장 현실적)": {"ret": sim_returns[median_idx, :], "pv": sim_assets_pv[median_idx, :]},
-            "하위 10% (스트레스)": {"ret": sim_returns[bot10_idx, :], "pv": sim_assets_pv[bot10_idx, :]}
-        }
-        with st.expander(f"📊 [심층 분석] {tgt_retire}세(은퇴) 도달 시점 시나리오별 자산 궤적 3종 비교", expanded=False):
-            st.markdown(f"**총 {res['n_sims']:,}번의 평행우주 중, 자산 성과 기준 대표 궤적입니다.**")
-            c_m1, c_m2, c_m3 = st.columns(3)
-            cols = [c_m1, c_m2, c_m3]
-            comp_data = {"나이": years}
-            target_age_idx = years.index(tgt_retire) if tgt_retire in years else -1
-
-            for i, (label, data) in enumerate(paths.items()):
-                ret_array = data["ret"]
-                pv_array = data["pv"]
-                cagr = (np.prod(1 + ret_array) ** (1 / len(years)) - 1) * 100
-                tgt_pv_eok = pv_array[target_age_idx] / 100000000 if target_age_idx != -1 else 0
-                cols[i].metric(label, f"{tgt_retire}세 자산 {tgt_pv_eok:.1f}억 원", f"연평균(CAGR): {cagr:.2f}%", delta_color="off")
-
-                short_label = label.split(" ")[0] + " " + label.split(" ")[1]
-                comp_data[f"[{short_label}] 수익률(%)"] = np.round(ret_array * 100, 2)
-                comp_data[f"[{short_label}] 자산(억)"] = np.round(pv_array / 100000000, 2)
-
-            st.markdown("---")
-            comp_df = pd.DataFrame(comp_data).set_index("나이")
-            c_chart1, c_chart2 = st.columns(2)
-            with c_chart1:
-                st.markdown("###### 📈 연도별 적용 수익률 추이 비교")
-                st.line_chart(comp_df[[c for c in comp_df.columns if "수익률" in c]], height=300)
-            with c_chart2:
-                st.markdown("###### 💰 연도별 자산 잔고 추이 비교 (현재가치)")
-                st.line_chart(comp_df[[c for c in comp_df.columns if "자산" in c]], height=300)
+        render_representative_paths_section(
+            years=years,
+            sim_assets_pv=sim_assets_pv,
+            sim_returns=sim_returns,
+            tgt_retire=tgt_retire,
+        )
 
         st.markdown("<br>", unsafe_allow_html=True)
         g_col, d_col = st.columns([2.5, 1.2])
 
         with g_col:
-            colors = ['#27AE60' if val <= target_ruin + 0.01 else '#F1C40F' if val < target_ruin + 10 else '#E74C3C' for val in stress_df['파산 확률(%)']]
-            fig_stress = go.Figure(data=[go.Bar(x=stress_df['라벨'], y=stress_df['파산 확률(%)'], marker_color=colors, text=[f"{val:.1f}%" for val in stress_df['파산 확률(%)']], textposition='auto')])
-            title_suffix = f"(81세 컷오프 & {target_ruin:.0f}% 방어)" if is_dwz else f"({target_ruin:.0f}% 방어)"
-            fig_stress.update_layout(title=f"<b>월 여유 생활비별 파산 확률 {title_suffix}</b>", yaxis_title="파산 확률 (%)", height=300, plot_bgcolor='rgba(252, 252, 252, 1)', margin=dict(l=20, r=20, t=40, b=20))
-            fig_stress.add_hline(y=target_ruin, line_dash="dot", line_color="green", annotation_text=f"안전 방어선 ({target_ruin:.0f}%)")
-            with st.container(border=True):
-                st.plotly_chart(fig_stress, use_container_width=True)
-
+            render_stress_budget_section(
+                stress_df=stress_df,
+                target_ruin=target_ruin,
+                is_dwz=is_dwz,
+            )
+            
             st.markdown(f"##### 📈 메인 자산 궤적 ({tgt_retire}세 1차 방어선 집중)")
             median_pv = np.median(sim_assets_pv, axis=0) / 100000000
             top_10_pv = np.percentile(sim_assets_pv, 90, axis=0) / 100000000
