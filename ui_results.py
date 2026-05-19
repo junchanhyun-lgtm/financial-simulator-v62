@@ -302,4 +302,16 @@ def render_engine_notes_section(defense_rate):
 
         **5. 다단계 생존 본능 (Dynamic Withdrawal)**
         계좌 잔고가 아닌 순수 시장 주가지수가 전고점 대비 5% 하락할 때마다 사치(YOLO) 지출을 20%씩 강제 삭감합니다.
-        """)               
+        """)         
+def render_simulation_summary_section(safe_extra, base_ruin, target_ruin):
+    st.info("💡 **[가치 평가 기준]** 본 시뮬레이터의 모든 결괏값은 인플레이션을 역산한 **'현재 체감 구매력(Present Value)'** 기준으로 완벽히 변환되어 표시됩니다.")
+
+    if safe_extra > 0:
+        st.markdown(f"""
+        <div class='yolo-box'>
+            <p class='yolo-title'>💰 파산 확률 {target_ruin:.0f}% 방어선 통과</p>
+            <p class='yolo-value'>이번 달 추가로 써도 되는 욜로(YOLO) 예산 = 월 {safe_extra:,}만 원</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({target_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")              
