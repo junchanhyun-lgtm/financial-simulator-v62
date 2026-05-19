@@ -17,6 +17,7 @@ from data_defaults import get_default_lump_events, get_default_recurring_events
 from simulator import FinancialSimulator
 from ui_inputs import render_input_panel
 from utils import format_won, calc_rolling_stats
+from params_builder import build_simulation_params
 
 # -----------------------------------------------------------
 # 2. 퀀트 시뮬레이션 코어 엔진 (V59)
@@ -334,20 +335,8 @@ def main():
     if st.button("🚀 5,000회 연산 및 정밀 스트레스 테스트 시작", type="primary", use_container_width=True):
         st.divider()
         n_sims = N_SIMULATIONS
-        params = {
-            'current_age': current_age, 'death_age': death_age, 'current_asset': current_asset,
-            'monthly_income': monthly_income, 'apply_income_inflation': apply_income_inflation,
-            'monthly_expense': monthly_expense,
-            'expected_return_pre': expected_return_pre, 'vol_pre': vol_pre,
-            'expected_return_post': expected_return_post, 'vol_post': vol_post,
-            'inflation': inflation, 'tax_fee_rate': tax_fee_rate, 'retire_age': retire_age,
-            'lump_events': clean_lump_df, 'recurring_events': clean_recur_df,
-            'use_fat_tail': use_fat_tail,
-            'use_inflation_shock': use_inflation_shock, 'use_flex_spending': use_flex_spending,
-            'dwz_mode': dwz_mode,
-            'use_glide_path': use_glide_path
-        }
-
+        params = build_simulation_params(input_values)
+            
         with st.spinner("복합 조세 모듈 및 글라이드 패스 연산 수행 중..."):
             simulator = FinancialSimulator(params)
             years, main_pv, main_nom, main_returns, safe_extra, base_ruin, stress_df, t_ruin = simulator.run_hybrid_analysis(
