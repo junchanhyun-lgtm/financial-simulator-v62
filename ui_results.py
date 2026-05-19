@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
+from risk_metrics import build_real_life_risk_table
 from utils import calc_rolling_stats
 
 
@@ -315,11 +316,21 @@ def render_simulation_summary_section(safe_extra, base_ruin, target_ruin):
         """, unsafe_allow_html=True)
     else:
         st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({target_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")        
+def render_real_life_risk_section(res):
+    risk_df = build_real_life_risk_table(res)
+
+    with st.expander("🧭 현실 리스크 지표: 파산 전 단계의 위험", expanded=True):
+        st.caption(
+            "※ 이 섹션은 기존 몬테카를로 결과에서 파생 계산한 해석 지표입니다. "
+            "수익률 생성, 파산확률, 자산경로 계산식은 변경하지 않습니다."
+        )
+        st.dataframe(risk_df, use_container_width=True, hide_index=True)
+
 def render_results_page(res):
     years = res["years"]
     sim_assets_pv = res["pv"]
     sim_returns = res["returns"]
-
+    
     base_ruin = res["base_ruin"]
     stress_df = res["stress_df"]
     sens_df = res["sens_df"]
@@ -328,6 +339,8 @@ def render_results_page(res):
     target_ruin = res["t_ruin"]
     res_lump_df = res["lump_df"]
     tgt_retire = res["retire_age"]
+   
+    render_real_life_risk_section(res)
 
     render_rolling_window_section(sim_returns)
 
