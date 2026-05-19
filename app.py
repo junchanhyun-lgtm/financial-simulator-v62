@@ -22,12 +22,6 @@ from ui_layout import render_page_layout
 from simulation_runner import run_simulation_analysis
 from result_state import build_sim_results_state
 from ui_results import (
-    render_rolling_window_section,
-    render_representative_paths_section,
-    render_stress_budget_section,
-    render_main_asset_path_section,
-    render_sensitivity_section,
-    render_engine_notes_section,
     render_simulation_summary_section,
     render_results_page,
 )
@@ -360,40 +354,6 @@ def main():
 
     if 'sim_results' in st.session_state:
         render_results_page(st.session_state["sim_results"])
-        
-        render_rolling_window_section(sim_returns)
-
-        render_representative_paths_section(
-            years=years,
-            sim_assets_pv=sim_assets_pv,
-            sim_returns=sim_returns,
-            tgt_retire=tgt_retire,
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        g_col, d_col = st.columns([2.5, 1.2])
-
-        with g_col:
-            render_stress_budget_section(
-                stress_df=stress_df,
-                target_ruin=target_ruin,
-                is_dwz=is_dwz,
-            )
-
-            render_main_asset_path_section(
-                years=years,
-                sim_assets_pv=sim_assets_pv,
-                base_ruin=base_ruin,
-                target_ruin=target_ruin,
-                tgt_retire=tgt_retire,
-                is_dwz=is_dwz,
-                res_lump_df=res_lump_df,
-            )
-
-            render_sensitivity_section(sens_df)
-
-        with d_col:
-            render_engine_notes_section(res["defense_rate"])
 
 if __name__ == '__main__':
     main()
