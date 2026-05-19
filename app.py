@@ -25,6 +25,8 @@ from ui_results import (
     render_rolling_window_section,
     render_representative_paths_section,
     render_stress_budget_section,
+    render_main_asset_path_section,
+    render_sensitivity_section,
 )
 
 # -----------------------------------------------------------
@@ -388,50 +390,19 @@ def main():
                 target_ruin=target_ruin,
                 is_dwz=is_dwz,
             )
+
+            render_main_asset_path_section(
+                years=years,
+                sim_assets_pv=sim_assets_pv,
+                base_ruin=base_ruin,
+                target_ruin=target_ruin,
+                tgt_retire=tgt_retire,
+                is_dwz=is_dwz,
+                res_lump_df=res_lump_df,
+            )
+
+            render_sensitivity_section(sens_df)
             
-            st.markdown(f"##### 📈 메인 자산 궤적 ({tgt_retire}세 1차 방어선 집중)")
-            median_pv = np.median(sim_assets_pv, axis=0) / 100000000
-            top_10_pv = np.percentile(sim_assets_pv, 90, axis=0) / 100000000
-            bottom_10_pv = np.percentile(sim_assets_pv, 10, axis=0) / 100000000
-
-            idx_target = years.index(tgt_retire) if tgt_retire in years else -1
-
-            k1, k2, k3 = st.columns(3)
-            k1.metric("90세 최종 파산 확률", f"{base_ruin:.1f}%")
-            k2.metric(f"{tgt_retire}세 예상 자산 (중앙값)", f"{median_pv[idx_target]:.2f}억 원")
-            k3.metric(f"최악의 경우 (하위 10%)", f"{bottom_10_pv[idx_target]:.2f}억 원")
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=years+years[::-1], y=np.concatenate([top_10_pv, bottom_10_pv[::-1]]), fill='toself', fillcolor='rgba(46, 134, 193, 0.15)', line=dict(color='rgba(255,255,255,0)'), name='신뢰구간(10~90%)', hoverinfo='skip'))
-            fig.add_trace(go.Scatter(x=years, y=median_pv, line=dict(color='#2E86C1', width=3), name='중앙값', hovertemplate='%{y:.2f}억 원<extra></extra>'))
-            fig.add_trace(go.Scatter(x=years, y=bottom_10_pv, line=dict(color='#E74C3C', width=2, dash='dot'), name='하위 10%', hovertemplate='%{y:.2f}억 원<extra></extra>'))
-            fig.add_hline(y=0, line_dash="solid", line_color="#333333", line_width=1)
-
-            if tgt_retire in years:
-                fig.add_vline(x=tgt_retire, line_dash="dash", line_color="#95a5a6", annotation_text="은퇴 & 수비형 전환")
-            if is_dwz and 81 in years:
-                fig.add_vline(x=81, line_dash="dot", line_color="#9b59b6", annotation_text="사치 종료")
-
-            for _, row in res_lump_df.iterrows():
-                if row['금액(만원)'] >= 10000 and row['나이'] in years:
-                    fig.add_vline(x=row['나이'], line_dash="dot", line_color="#f39c12", annotation_text=row['내용'])
-
-            fig.update_layout(xaxis_title="나이", yaxis_title="현재 체감 자산 (억 원)", height=450, plot_bgcolor='rgba(252, 252, 252, 1)', hovermode="x unified", margin=dict(t=20, l=10, r=10))
-            with st.container(border=True):
-                st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("##### 🌪️ 변수 민감도 분석 (파산 트리거)")
-            sens_df_sorted = sens_df.sort_values(by="충격(%)", key=abs, ascending=True)
-            t_colors = ['#E74C3C' if val > 0 else '#27AE60' for val in sens_df_sorted['충격(%)']]
-            fig_torn = go.Figure(go.Bar(
-                x=sens_df_sorted['충격(%)'], y=sens_df_sorted['시나리오'], orientation='h', marker_color=t_colors,
-                text=[f"+{v:.1f}%p" if v > 0 else f"{v:.1f}%p" for v in sens_df_sorted['충격(%)']], textposition='auto'
-            ))
-            fig_torn.update_layout(title="<b>해당 사건 발생 시 '파산 확률' 증감 폭</b>", xaxis_title="파산 확률 변동 폭 (%p)", height=250, plot_bgcolor='rgba(252, 252, 252, 1)', margin=dict(l=20, r=20, t=40, b=20))
-            fig_torn.add_vline(x=0, line_width=2, line_color="#333333")
-            with st.container(border=True):
-                st.plotly_chart(fig_torn, use_container_width=True)
-
         with d_col:
             with st.container(border=True):
                 st.subheader("💡 퀀트 코어 엔진: V59 튜닝 로직")
