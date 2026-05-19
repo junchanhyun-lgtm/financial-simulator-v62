@@ -18,6 +18,7 @@ from simulator import FinancialSimulator
 from ui_inputs import render_input_panel
 from utils import format_won, calc_rolling_stats
 from params_builder import build_simulation_params
+from ui_layout import render_page_layout
 
 # -----------------------------------------------------------
 # 2. 퀀트 시뮬레이션 코어 엔진 (V59)
@@ -291,43 +292,13 @@ class FinancialSimulator:
 # 3. Streamlit UI (V59 Final)
 # -----------------------------------------------------------
 def main():
-    st.set_page_config(layout="wide", page_title=PAGE_TITLE)
-
-    st.markdown("""
-        <style>
-        [data-testid="stMetric"] { border: 1px solid #e0e0e0; border-radius: 12px; padding: 15px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); background-color: #ffffff; }
-        [data-testid="stMetricValue"] { font-size: 1.8rem !important; font-weight: 700; }
-        div.stAlert > div { border-radius: 10px; }
-        .yolo-box { background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; padding: 25px; text-align: center; margin-bottom: 20px; }
-        .yolo-title { color: #166534; font-size: 1.4rem; font-weight: 700; margin: 0; }
-        .yolo-value { color: #15803d; font-size: 2.2rem; font-weight: 800; margin: 10px 0 0 0; }
-        </style>
-    """, unsafe_allow_html=True)
-
-    st.title(MAIN_TITLE)
-    st.info(UPDATE_MESSAGE)
-    st.markdown("---")
+    render_page_layout()
 
     input_values = render_input_panel()
 
-    current_age = input_values["current_age"]
     retire_age = input_values["retire_age"]
-    death_age = input_values["death_age"]
-    monthly_income = input_values["monthly_income"]
-    apply_income_inflation = input_values["apply_income_inflation"]
     monthly_expense = input_values["monthly_expense"]
-    current_asset = input_values["current_asset"]
-    expected_return_pre = input_values["expected_return_pre"]
-    vol_pre = input_values["vol_pre"]
-    expected_return_post = input_values["expected_return_post"]
-    vol_post = input_values["vol_post"]
-    inflation = input_values["inflation"]
-    tax_fee_rate = input_values["tax_fee_rate"]
-    use_fat_tail = input_values["use_fat_tail"]
-    use_inflation_shock = input_values["use_inflation_shock"]
-    use_flex_spending = input_values["use_flex_spending"]
     dwz_mode = input_values["dwz_mode"]
-    use_glide_path = input_values["use_glide_path"]
 
     clean_lump_df = input_values["lump_events"]
     clean_recur_df = input_values["recurring_events"]
