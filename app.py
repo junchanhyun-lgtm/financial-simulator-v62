@@ -28,6 +28,8 @@ from ui_results import (
     render_main_asset_path_section,
     render_sensitivity_section,
     render_engine_notes_section,
+    render_simulation_summary_section,
+    render_results_page,
 )
 
 # -----------------------------------------------------------
@@ -336,18 +338,9 @@ def main():
             sens_df = analysis["sens_df"]
             t_ruin = analysis["t_ruin"]
             defense_rate = analysis["defense_rate"]
-            st.info("💡 **[가치 평가 기준]** 본 시뮬레이터의 모든 결괏값은 인플레이션을 역산한 **'현재 체감 구매력(Present Value)'** 기준으로 완벽히 변환되어 표시됩니다.")
 
-            if safe_extra > 0:
-                st.markdown(f"""
-                <div class='yolo-box'>
-                    <p class='yolo-title'>💰 파산 확률 {t_ruin:.0f}% 방어선 통과</p>
-                    <p class='yolo-value'>이번 달 추가로 써도 되는 욜로(YOLO) 예산 = 월 {safe_extra:,}만 원</p>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({t_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")
-
+            render_simulation_summary_section(safe_extra, base_ruin, t_ruin)
+            
             st.session_state["sim_results"] = build_sim_results_state(
                 years=years,
                 main_pv=main_pv,
@@ -366,13 +359,8 @@ def main():
             )
 
     if 'sim_results' in st.session_state:
-        res = st.session_state['sim_results']
-        years, sim_assets_pv, sim_returns = res['years'], res['pv'], res['returns']
-        base_ruin, stress_df, sens_df = res['base_ruin'], res['stress_df'], res['sens_df']
-        is_dwz, target_ruin = res['dwz_mode'], res['t_ruin']
-        res_lump_df = res['lump_df']
-        tgt_retire = res['retire_age']
-
+        render_results_page(st.session_state["sim_results"])
+        
         render_rolling_window_section(sim_returns)
 
         render_representative_paths_section(
@@ -405,24 +393,7 @@ def main():
             render_sensitivity_section(sens_df)
 
         with d_col:
-            with st.container(border=True):
-                st.subheader("💡 퀀트 코어 엔진: V59 튜닝 로직")
-                st.info(f"""
-                **1. 자산 평가 및 연금 방어율 (PV Discounting)**
-                모든 시뮬레이션 결과값은 인플레이션을 역산한 **'현재 체감 구매력'**입니다. 현재 월 필수 지출 대비 확정 연금(국민/주택)의 방어율은 **{res['defense_rate']:.1f}%**입니다.
-
-                **2. 자동 글라이드 패스 & 7:3 블렌딩**
-                사용자가 선택한 통합 시나리오에 따라, 은퇴 시점에 도달하면 계좌 내 **안전자산(채권 등)의 비중이 30%로 자동 증가**하며 기대수익률과 변동성이 시스템 룰에 맞춰 동시에 하강합니다.
-
-                **3. 기계적 매매 마찰 비용 (Slippage Decay)**
-                수익률 모델링과 별개로, 자산 규모가 10억 원을 초과할 때마다 연 4회 리밸런싱에서 발생하는 호가 스프레드 비용을 수식(`0.015 * log10(자산/10억)`)에 따라 매년 자산에서 확정 삭감합니다.
-
-                **4. 상하방 평균 회귀 (Mean Reversion - 10%)**
-                자본 시장의 중력을 모사한 자기회귀(AR-1) 모델이 적용되었습니다. 전년도 시장이 폭등/폭락하면, 다음 해의 기대수익률은 기계적으로 역방향(10%)으로 끌어당겨집니다.
-
-                **5. 다단계 생존 본능 (Dynamic Withdrawal)**
-                계좌 잔고가 아닌 순수 시장 주가지수가 전고점 대비 5% 하락할 때마다 사치(YOLO) 지출을 20%씩 강제 삭감합니다.
-                """)
+            render_engine_notes_section(res["defense_rate"])
 
 if __name__ == '__main__':
     main()

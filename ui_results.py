@@ -314,4 +314,52 @@ def render_simulation_summary_section(safe_extra, base_ruin, target_ruin):
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({target_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")              
+        st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({target_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")        
+def render_results_page(res):
+    years = res["years"]
+    sim_assets_pv = res["pv"]
+    sim_returns = res["returns"]
+
+    base_ruin = res["base_ruin"]
+    stress_df = res["stress_df"]
+    sens_df = res["sens_df"]
+
+    is_dwz = res["dwz_mode"]
+    target_ruin = res["t_ruin"]
+    res_lump_df = res["lump_df"]
+    tgt_retire = res["retire_age"]
+
+    render_rolling_window_section(sim_returns)
+
+    render_representative_paths_section(
+        years,
+        sim_assets_pv,
+        sim_returns,
+        tgt_retire,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    g_col, d_col = st.columns([2.5, 1.2])
+
+    with g_col:
+        render_stress_budget_section(
+            stress_df,
+            target_ruin,
+            is_dwz,
+        )
+
+        render_main_asset_path_section(
+            years,
+            sim_assets_pv,
+            base_ruin,
+            target_ruin,
+            tgt_retire,
+            is_dwz,
+            res_lump_df,
+        )
+
+        render_sensitivity_section(sens_df)
+
+    with d_col:
+        render_engine_notes_section(res["defense_rate"])              
