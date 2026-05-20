@@ -4,9 +4,16 @@ import pandas as pd
 from config import (
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     DWZ_TARGET_RUIN_PROB,
+    FAT_TAIL_DF,
+    INFLATION_SHOCK_ANNUAL_PROBABILITY,
+    INFLATION_SHOCK_DURATION_YEARS,
+    INFLATION_SHOCK_INFLATION_ADDON,
+    INFLATION_SHOCK_RETURN_PENALTY,
+    INFLATION_SHOCK_VOL_MULTIPLIER,
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    MEAN_REVERSION_STRENGTH,
     QUANT_SIZE_PENALTY_TIERS,
     STANDARD_TARGET_RUIN_PROB,
 )
@@ -160,6 +167,37 @@ class FinancialSimulator:
 
         return mu_base, vol_base, quant_share_base
 
+    @staticmethod
+    def _build_inflation_shock_mask(
+        n_simulations,
+        simulation_years,
+        annual_probability=INFLATION_SHOCK_ANNUAL_PROBABILITY,
+        duration_years=INFLATION_SHOCK_DURATION_YEARS,
+    ):
+        """생애기간 중 확률적으로 발생하는 인플레이션 쇼크 구간을 생성합니다.
+
+        기존처럼 은퇴 직후에 강제로 넣지 않고, 매년 쇼크 시작 여부를 판정합니다.
+        쇼크가 시작되면 지정된 기간 동안 지속되며, 같은 기간 안에서는 중복 쇼크를 만들지 않습니다.
+        """
+        shock_mask = np.zeros((n_simulations, simulation_years), dtype=bool)
+
+        if annual_probability <= 0 or duration_years <= 0 or simulation_years <= 0:
+            return shock_mask
+
+        duration_years = int(duration_years)
+
+        for sim_idx in range(n_simulations):
+            t = 0
+            while t < simulation_years:
+                if np.random.random() < annual_probability:
+                    end = min(t + duration_years, simulation_years)
+                    shock_mask[sim_idx, t:end] = True
+                    t = end
+                else:
+                    t += 1
+
+        return shock_mask
+
     def run_monte_carlo(self, n_simulations=5000, override_extra_margin=0):
         current_age = self.params["current_age"]
         death_age = self.params["death_age"]
@@ -187,18 +225,15 @@ class FinancialSimulator:
 
         years = list(range(current_age, death_age + 1))
         simulation_years = len(years)
-        retire_idx = max(0, self.params["retire_age"] - current_age)
-
         inflation_matrix = np.full((n_simulations, simulation_years), inflation)
         shock_mask = np.zeros((n_simulations, simulation_years), dtype=bool)
 
         if use_inflation_shock:
-            max_start = max(retire_idx, min(simulation_years - 3, retire_idx + 9))
-            shock_starts = np.random.randint(retire_idx, max_start + 1, size=n_simulations)
-            for i in range(3):
-                cols = np.clip(shock_starts + i, 0, simulation_years - 1)
-                shock_mask[np.arange(n_simulations), cols] = True
-                inflation_matrix[np.arange(n_simulations), cols] = 0.07
+            shock_mask = self._build_inflation_shock_mask(
+                n_simulations=n_simulations,
+                simulation_years=simulation_years,
+            )
+            inflation_matrix[shock_mask] = inflation + INFLATION_SHOCK_INFLATION_ADDON
 
         discount_factors = np.ones((n_simulations, simulation_years))
         if simulation_years > 1:
@@ -246,13 +281,16 @@ class FinancialSimulator:
         vol_matrix = np.tile(vol_base, (n_simulations, 1))
 
         if use_inflation_shock:
-            shock_penalty = 0.05
-            vol_multiplier = 1.5
-            mu_matrix[shock_mask] -= shock_penalty
-            vol_matrix[shock_mask] *= vol_multiplier
+            mu_matrix[shock_mask] -= INFLATION_SHOCK_RETURN_PENALTY
+            vol_matrix[shock_mask] *= INFLATION_SHOCK_VOL_MULTIPLIER
 
         if use_fat_tail:
-            z_matrix = np.random.standard_t(df=5, size=(n_simulations, simulation_years)) / np.sqrt(5 / 3)
+            # t분포는 자유도/(자유도-2)의 분산을 가지므로 표준편차가 1이 되도록 정규화합니다.
+            fat_tail_scale = np.sqrt(FAT_TAIL_DF / (FAT_TAIL_DF - 2))
+            z_matrix = (
+                np.random.standard_t(df=FAT_TAIL_DF, size=(n_simulations, simulation_years))
+                / fat_tail_scale
+            )
         else:
             z_matrix = np.random.normal(loc=0.0, scale=1.0, size=(n_simulations, simulation_years))
 
@@ -260,11 +298,9 @@ class FinancialSimulator:
 
         sim_returns = np.zeros_like(temp_returns)
         sim_returns[:, 0] = temp_returns[:, 0]
-        reversion_strength = 0.10
-
         for t in range(1, simulation_years):
             excess_prev = sim_returns[:, t - 1] - mu_matrix[:, t - 1]
-            sim_returns[:, t] = temp_returns[:, t] - (reversion_strength * excess_prev)
+            sim_returns[:, t] = temp_returns[:, t] - (MEAN_REVERSION_STRENGTH * excess_prev)
 
         market_index_matrix = np.cumprod(1 + sim_returns, axis=1) * 100.0
         high_water_mark_matrix = np.maximum.accumulate(market_index_matrix, axis=1)

@@ -3,7 +3,16 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
-from config import WARNING_RUIN_PROB
+from config import (
+    FAT_TAIL_DF,
+    INFLATION_SHOCK_ANNUAL_PROBABILITY,
+    INFLATION_SHOCK_DURATION_YEARS,
+    INFLATION_SHOCK_INFLATION_ADDON,
+    INFLATION_SHOCK_RETURN_PENALTY,
+    INFLATION_SHOCK_VOL_MULTIPLIER,
+    MEAN_REVERSION_STRENGTH,
+    WARNING_RUIN_PROB,
+)
 from risk_metrics import build_real_life_risk_table
 
 
@@ -370,8 +379,8 @@ def render_engine_notes_section(defense_rate):
             **6. 파산확률 기준**  
             일반 기준은 10%, DWZ 기준은 15%입니다. 20% 이상은 경고 구간으로 봅니다.
 
-            **7. 이번 패치에서 유지한 기존 로직**  
-            팻테일, 인플레이션 쇼크, 평균회귀 구조는 변경하지 않았습니다.
+            **7. 수익률 분포 현실화**  
+            팻테일은 t분포 자유도 **{FAT_TAIL_DF}**로 완화했습니다. 인플레이션 쇼크는 은퇴 직후 강제 발생이 아니라 생애기간 중 매년 **{INFLATION_SHOCK_ANNUAL_PROBABILITY * 100:.1f}%** 확률로 시작되는 **{INFLATION_SHOCK_DURATION_YEARS}년** 이벤트로 처리합니다. 쇼크 중 물가는 **+{INFLATION_SHOCK_INFLATION_ADDON * 100:.1f}%p**, 기대수익률은 **-{INFLATION_SHOCK_RETURN_PENALTY * 100:.1f}%p**, 변동성은 **{INFLATION_SHOCK_VOL_MULTIPLIER:.1f}배**로 조정합니다. 평균회귀는 **{MEAN_REVERSION_STRENGTH * 100:.1f}%**로 낮춰 폭락 후 자동 회복 가정을 완화했습니다.
             """
         )
 

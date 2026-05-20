@@ -1,16 +1,28 @@
-APP_VERSION = "V60-2"
+APP_VERSION = "V60-3"
 
-PAGE_TITLE = "My Quant Asset Sim (V60-2)"
+PAGE_TITLE = "My Quant Asset Sim (V60-3)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-2)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-3)"
 
 UPDATE_MESSAGE = (
-    "💡 V60-2 업데이트: DWZ 지출을 필수/조정가능 지출로 재설계하고, "
-    "자산규모 페널티와 글라이드패스를 실제 계좌이동 계획 기준으로 현실화"
+    "💡 V60-3 업데이트: 팻테일 강도, 인플레이션 쇼크, 평균회귀를 "
+    "현재 포트폴리오 기준에 맞게 현실화"
 )
 
 N_SIMULATIONS = 5000
 SEARCH_SIMULATIONS = 500
+
+# 수익률 분포 현실화 기본값
+# - 팻테일: 기존 df=5보다 완화한 df=10을 사용해 정규분포보다 두꺼운 꼬리는 유지하되 과도한 극단 손실은 줄입니다.
+# - 인플레이션 쇼크: 은퇴 후 강제 3년이 아니라 생애기간 중 확률적으로 발생하는 고물가·수익률 압박 이벤트로 처리합니다.
+# - 평균회귀: 기존 10%보다 약한 5%로 낮춰 폭락 후 자동 회복 가정을 완화합니다.
+FAT_TAIL_DF = 10
+INFLATION_SHOCK_ANNUAL_PROBABILITY = 0.025
+INFLATION_SHOCK_DURATION_YEARS = 3
+INFLATION_SHOCK_INFLATION_ADDON = 0.04
+INFLATION_SHOCK_RETURN_PENALTY = 0.04
+INFLATION_SHOCK_VOL_MULTIPLIER = 1.30
+MEAN_REVERSION_STRENGTH = 0.05
 
 # 파산확률 판단 기준
 # - 일반 모드: 안정 은퇴 기준 10%

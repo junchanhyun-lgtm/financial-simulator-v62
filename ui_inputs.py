@@ -4,9 +4,16 @@ from config import (
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     DEFAULT_SCENARIO_INDEX,
     DEFAULT_SPENDING_PROFILE_INDEX,
+    FAT_TAIL_DF,
+    INFLATION_SHOCK_ANNUAL_PROBABILITY,
+    INFLATION_SHOCK_DURATION_YEARS,
+    INFLATION_SHOCK_INFLATION_ADDON,
+    INFLATION_SHOCK_RETURN_PENALTY,
+    INFLATION_SHOCK_VOL_MULTIPLIER,
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    MEAN_REVERSION_STRENGTH,
     SCENARIO_OPTIONS,
     SPENDING_PROFILE_OPTIONS,
 )
@@ -177,16 +184,26 @@ def render_input_panel():
         with c_adv2.container(border=True):
             st.markdown("##### 🚨 극한 스트레스 테스팅")
             use_fat_tail = st.checkbox(
-                "📉 팻 테일(Fat Tail) 대폭락장 적용",
+                "📉 팻테일 꼬리위험 반영",
                 value=True,
                 key="in_fat",
-                help="정규분포보다 극단적 수익률이 더 자주 나오는 분포를 사용합니다.",
+                help=f"정규분포보다 극단적 수익률이 더 자주 나오는 t분포를 사용합니다. 기본 자유도는 {FAT_TAIL_DF}입니다.",
             )
             use_inflation_shock = st.checkbox(
-                "🔥 스태그플레이션 (수익률 영구 타격)",
+                "🔥 확률형 인플레이션 쇼크 반영",
                 value=True,
                 key="in_shock",
-                help="은퇴 초반부에 3년간 고물가와 수익률 하락이 동시에 발생하는 스트레스 상황을 반영합니다.",
+                help=(
+                    f"생애 기간 중 매년 {INFLATION_SHOCK_ANNUAL_PROBABILITY * 100:.1f}% 확률로 "
+                    f"{INFLATION_SHOCK_DURATION_YEARS}년 고물가·수익률 압박 구간을 반영합니다. "
+                    f"쇼크 중 물가는 +{INFLATION_SHOCK_INFLATION_ADDON * 100:.1f}%p, "
+                    f"기대수익률은 -{INFLATION_SHOCK_RETURN_PENALTY * 100:.1f}%p, "
+                    f"변동성은 {INFLATION_SHOCK_VOL_MULTIPLIER:.1f}배로 조정됩니다."
+                ),
+            )
+            st.caption(
+                f"수익률 분포 보정: 팻테일 df={FAT_TAIL_DF}, "
+                f"평균회귀 {MEAN_REVERSION_STRENGTH * 100:.1f}%"
             )
 
     st.markdown("---")

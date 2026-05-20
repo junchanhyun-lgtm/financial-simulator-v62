@@ -12,9 +12,16 @@ from config import (  # noqa: E402
     DEFAULT_SCENARIO_INDEX,
     DEFAULT_SPENDING_PROFILE_INDEX,
     DWZ_TARGET_RUIN_PROB,
+    FAT_TAIL_DF,
+    INFLATION_SHOCK_ANNUAL_PROBABILITY,
+    INFLATION_SHOCK_DURATION_YEARS,
+    INFLATION_SHOCK_INFLATION_ADDON,
+    INFLATION_SHOCK_RETURN_PENALTY,
+    INFLATION_SHOCK_VOL_MULTIPLIER,
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    MEAN_REVERSION_STRENGTH,
     QUANT_SIZE_PENALTY_TIERS,
     SCENARIO_OPTIONS,
     SPENDING_PROFILE_OPTIONS,
@@ -96,6 +103,14 @@ def check_config_assumptions():
     assert_equal("ANNUAL_TRANSFER_TO_DUAL_MANWON", ANNUAL_TRANSFER_TO_DUAL_MANWON, 3800)
     assert_equal("QUANT_SIZE_PENALTY_TIERS length", len(QUANT_SIZE_PENALTY_TIERS), 5)
 
+    assert_equal("FAT_TAIL_DF", FAT_TAIL_DF, 10)
+    assert_close("INFLATION_SHOCK_ANNUAL_PROBABILITY", INFLATION_SHOCK_ANNUAL_PROBABILITY, 0.025)
+    assert_equal("INFLATION_SHOCK_DURATION_YEARS", INFLATION_SHOCK_DURATION_YEARS, 3)
+    assert_close("INFLATION_SHOCK_INFLATION_ADDON", INFLATION_SHOCK_INFLATION_ADDON, 0.04)
+    assert_close("INFLATION_SHOCK_RETURN_PENALTY", INFLATION_SHOCK_RETURN_PENALTY, 0.04)
+    assert_close("INFLATION_SHOCK_VOL_MULTIPLIER", INFLATION_SHOCK_VOL_MULTIPLIER, 1.30)
+    assert_close("MEAN_REVERSION_STRENGTH", MEAN_REVERSION_STRENGTH, 0.05)
+
 
 def check_target_ruin_probability():
     normal_result = FinancialSimulator(build_params(dwz_mode=False)).run_hybrid_analysis(
@@ -142,6 +157,25 @@ def check_portfolio_transition_and_penalty_helpers():
         assert_close(f"quant size penalty[{idx}]", actual, exp)
 
 
+def check_inflation_shock_mask_helper():
+    empty_mask = FinancialSimulator._build_inflation_shock_mask(
+        n_simulations=3,
+        simulation_years=12,
+        annual_probability=0.0,
+        duration_years=INFLATION_SHOCK_DURATION_YEARS,
+    )
+    if empty_mask.any():
+        raise AssertionError("inflation shock mask should be empty when probability is zero")
+
+    full_mask = FinancialSimulator._build_inflation_shock_mask(
+        n_simulations=3,
+        simulation_years=12,
+        annual_probability=1.0,
+        duration_years=INFLATION_SHOCK_DURATION_YEARS,
+    )
+    if not full_mask.all():
+        raise AssertionError("inflation shock mask should fully cover all years when probability is one")
+
 def check_monte_carlo_shapes():
     years, pv, nom, returns = FinancialSimulator(build_params(dwz_mode=True)).run_monte_carlo(
         n_simulations=30,
@@ -157,8 +191,9 @@ def main():
     check_config_assumptions()
     check_target_ruin_probability()
     check_portfolio_transition_and_penalty_helpers()
+    check_inflation_shock_mask_helper()
     check_monte_carlo_shapes()
-    print("OK: portfolio transition and spending assumptions checks passed.")
+    print("OK: portfolio transition, spending, and return distribution assumptions checks passed.")
 
 
 if __name__ == "__main__":
