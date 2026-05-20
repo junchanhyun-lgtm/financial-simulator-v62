@@ -4,15 +4,13 @@ import streamlit as st
 import plotly.graph_objects as go
 
 from config import (
-    ACCOUNT_LABELS,
-    ACCOUNT_NAMES,
-    ACCOUNT_SCENARIOS,
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     DATA_ANALYSIS_SUMMARY,
     DWZ_TARGET_RUIN_PROB,
     ESSENTIAL_SPENDING_RATIO,
     FAT_TAIL_DF,
     FLEXIBLE_SPENDING_RATIO,
+    FIXED_RANDOM_SEED_ENABLED,
     INFLATION_SHOCK_ANNUAL_PROBABILITY,
     INFLATION_SHOCK_DURATION_YEARS,
     INFLATION_SHOCK_INFLATION_ADDON,
@@ -21,16 +19,20 @@ from config import (
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    ISA_ANNUAL_CONTRIBUTION_MANWON,
+    ISA_MATURITY_TO_PENSION_DEFAULT_MANWON,
     MEAN_REVERSION_STRENGTH,
-    MIN_ACCOUNT_ANNUAL_RETURN,
+    MIN_TOTAL_ANNUAL_RETURN,
     RANDOM_SEED,
+    RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON,
+    SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
     TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
     TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
     WARNING_RUIN_PROB,
 )
 from risk_metrics import build_real_life_risk_table
-from simulator import build_account_allocation_table, build_account_cashflow_table, build_failure_diagnostics
+from simulator import build_failure_diagnostics
 
 
 def _fmt_eok(value_won):
@@ -159,7 +161,7 @@ def render_data_assumption_section():
         )
         st.caption(
             "국내퀀트 7월말~11월말 단기채 구간은 별도 국내 단기채 월별 자료가 없어 0%로 두었습니다. "
-            "시뮬레이터 기본값은 원자료 CAGR을 그대로 쓰지 않고 할인한 값입니다."
+            "V62-1 기본 엔진은 계좌별 원자료를 직접 합성하지 않고 통합 시나리오의 검토 근거로만 사용합니다."
         )
 
 
@@ -238,74 +240,14 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
         )
 
 
-def render_account_allocation_section(res):
-    account_pv = res.get("account_pv")
-    if account_pv is None:
-        return
-
-    years = res["years"]
-    retire_age = res["retire_age"]
-    target_ages = sorted(set([years[0], retire_age, 55, 60, 70, years[-1]]))
-    allocation_df = build_account_allocation_table(res, target_ages)
-    cashflow_df = build_account_cashflow_table(res, target_ages)
-
-    with st.expander("🏦 계좌별 자산 비중 추적", expanded=True):
-        st.caption(
-            "국내퀀트, 연금저축+ISA, VOO를 별도 계좌로 시뮬레이션한 결과입니다. "
-            "V61-4부터는 대표경로 1개가 아니라 각 계좌의 중앙값과 하위 10%를 표시합니다. "
-            "따라서 국내퀀트가 비정상적으로 빨리 사라지는 것처럼 보였던 대표경로 착시를 줄입니다."
-        )
-        st.dataframe(allocation_df, use_container_width=True, hide_index=True)
-        st.caption(
-            "총자산 중앙값과 계좌중앙값 합계는 완전히 같지 않을 수 있습니다. "
-            "전자는 전체 자산분포의 중앙값이고, 후자는 각 계좌별 중앙값을 따로 계산한 합계입니다."
-        )
-
-        if not cashflow_df.empty:
-            st.markdown("###### 계좌이동·인출 누적 진단")
-            st.dataframe(cashflow_df, use_container_width=True, hide_index=True)
-            st.caption(
-                "국내퀀트 감소가 매년 3,800만 원 이체 때문인지, 주택구입·생활비 부족분 등 인출 때문인지 구분하기 위한 표입니다."
-            )
-
-        account_median_eok = np.median(account_pv, axis=0) / 100000000.0
-        fig = go.Figure()
-        for idx, key in enumerate(ACCOUNT_NAMES):
-            fig.add_trace(
-                go.Scatter(
-                    x=years,
-                    y=account_median_eok[:, idx],
-                    mode="lines",
-                    name=f"{ACCOUNT_LABELS[key]} 중앙값",
-                    hovertemplate="%{y:.2f}억 원<extra></extra>",
-                )
-            )
-        fig.update_layout(
-            title="계좌별 중앙값 자산 추이",
-            xaxis_title="나이",
-            yaxis_title="현재가치 자산 (억 원)",
-            height=360,
-            hovermode="x unified",
-            margin=dict(t=40, l=10, r=10, b=20),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption(
-            "이 그래프는 하나의 대표경로가 아니라 각 나이별 계좌 중앙값입니다. "
-            "개별 계좌의 전형적 규모를 보기 위한 용도입니다."
-        )
-
-
 def render_failure_diagnostics_section(res):
     with st.expander("🔍 결과 원인 분해 패널", expanded=True):
         diag = build_failure_diagnostics(res, res["retire_age"])
         st.caption(
             "파산 경로와 생존 경로를 분리해 은퇴시점 자산, 은퇴 직후 수익률, 인플레이션 쇼크, "
-            "국내퀀트 페널티 차이를 비교합니다. 결과값 자체를 바꾸지 않는 후처리 진단입니다."
+            "국내퀀트 페널티, 은퇴 전 순인출을 비교합니다. 결과값 자체를 바꾸지 않는 후처리 진단입니다."
         )
         st.dataframe(diag["diagnostic_df"], use_container_width=True, hide_index=True)
-        if not diag["account_df"].empty:
-            st.markdown("###### 계좌별 은퇴시점 중앙값 비교")
-            st.dataframe(diag["account_df"], use_container_width=True, hide_index=True)
         st.info(diag["reason_text"])
 
 
@@ -337,7 +279,7 @@ def render_scenario_comparison_section(res):
 
     with st.expander("📊 시나리오별 결과 비교", expanded=True):
         st.caption(
-            "보수·기본·공격·자료기반 원자료 시나리오를 같은 입력값 기준으로 비교합니다. "
+            "보수·기본·공격 통합 시나리오를 같은 입력값 기준으로 비교합니다. "
             "현재 선택된 시나리오에는 * 표시가 붙습니다."
         )
         st.dataframe(
@@ -448,8 +390,6 @@ def render_stress_budget_section(stress_df, target_ruin):
 
 def render_applied_model_section(res):
     defense_rate = res["defense_rate"]
-    scenario_name = res.get("scenario_name", "기본")
-    scenario = res.get("scenario") or ACCOUNT_SCENARIOS.get(scenario_name, ACCOUNT_SCENARIOS["기본"])
 
     model_df = pd.DataFrame(
         [
@@ -459,17 +399,38 @@ def render_applied_model_section(res):
                 "의미": "인플레이션을 역산한 현시점 구매력 기준으로 자산·지출·연금·추가사용액을 표시합니다.",
             },
             {
-                "모델": "계좌별 수익률 분리",
-                "현재 설정": (
-                    f"{scenario_name}: 국내퀀트 {scenario['quant_return']:.1f}%/{scenario['quant_vol']:.1f}%, "
-                    f"듀얼 {scenario['dual_return']:.1f}%/{scenario['dual_vol']:.1f}%, "
-                    f"VOO {scenario['voo_return']:.1f}%/{scenario['voo_vol']:.1f}%"
-                ),
-                "의미": "총자산 하나에 통합 수익률을 넣지 않고, 세 계좌별 기대수익률·변동성을 따로 적용합니다.",
+                "모델": "기본 엔진",
+                "현재 설정": "총 금융자산 통합 시뮬레이션",
+                "의미": "국내퀀트·연금저축/ISA·VOO를 장기 계좌별로 강제 분리하지 않고, 전체 금융자산의 통합 기대수익률·변동성으로 계산합니다.",
+            },
+            {
+                "모델": "시나리오 수익률",
+                "현재 설정": "보수/기본/공격 통합 시나리오",
+                "의미": "업로드 자료의 원자료 CAGR은 참고값으로만 두고, 미래 알파 감소와 운용 현실성을 반영한 통합 수익률 가정을 사용합니다.",
+            },
+            {
+                "모델": "연금저축 납입",
+                "현재 설정": f"연 {RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON:,}만 원",
+                "의미": "세액공제 목적의 계좌 내부 이동으로 보며, 총 금융자산 자체를 감소시키는 지출 이벤트로 처리하지 않습니다.",
+            },
+            {
+                "모델": "ISA 신규납입",
+                "현재 설정": f"연 {ISA_ANNUAL_CONTRIBUTION_MANWON:,}만 원",
+                "의미": "연금저축 과대적립을 피하기 위해 ISA 신규납입은 기본 0원으로 두고, 기존 ISA는 만기 전 연장 또는 일부 연금전환 여부를 별도 판단합니다.",
+            },
+            {
+                "모델": "ISA 만기 연금전환",
+                "현재 설정": f"기본 {ISA_MATURITY_TO_PENSION_DEFAULT_MANWON:,}만 원",
+                "의미": "총자산 모델에서는 기본값을 0원으로 두며, 필요 시 별도 이벤트/민감도 분석으로 판단합니다.",
+            },
+            {
+                "모델": "계좌이동 기반 전환",
+                "현재 설정": f"연 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원",
+                "의미": "V60-7의 연 3,800만 원 이전 가정은 제거했습니다. 계좌 간 이동은 총자산에는 중립이므로 기본 수익률 경로를 흔들지 않습니다.",
             },
             {
                 "모델": "고정 seed 검증",
-                "현재 설정": f"기본 seed {RANDOM_SEED}",
+                "현재 설정": f"{'사용' if FIXED_RANDOM_SEED_ENABLED else '미사용'} · seed {RANDOM_SEED}",
                 "의미": "같은 입력이면 같은 난수 경로가 재현되어 코드 수정 전후 결과 비교가 안정적입니다.",
             },
             {
@@ -488,9 +449,9 @@ def render_applied_model_section(res):
                 "의미": "정규분포보다 극단 손실을 더 반영하되, 폭락 후 자동 회복 가정은 약하게 둡니다.",
             },
             {
-                "모델": "계좌별 수익률 하한",
-                "현재 설정": f"연간 {MIN_ACCOUNT_ANNUAL_RETURN * 100:.0f}% 하한",
-                "의미": "t분포 난수가 만드는 -100% 이하 비현실적 연간수익률을 차단해, 계좌 0원 원인을 인출과 구분합니다.",
+                "모델": "연간수익률 하한",
+                "현재 설정": f"{MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% 하한",
+                "의미": "t분포 난수가 만드는 -100% 이하 비현실적 연간수익률을 차단합니다.",
             },
             {
                 "모델": "고물가 쇼크",
@@ -503,9 +464,9 @@ def render_applied_model_section(res):
                 "의미": "나이와 시장 하락에 따른 긴축은 조정가능지출에만 적용하고, 필수지출은 자동 삭감하지 않습니다.",
             },
             {
-                "모델": "포트폴리오 전환",
-                "현재 설정": f"은퇴 전까지 연 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원 이동",
-                "의미": f"국내퀀트 {INITIAL_QUANT_ASSET_MANWON/10000:.1f}억, 듀얼모멘텀 {INITIAL_DUAL_MOMENTUM_ASSET_MANWON/10000:.1f}억, VOO {INITIAL_VOO_ASSET_MANWON/10000:.1f}억 기준으로 국내퀀트에서 연금저축+ISA로 이체합니다.",
+                "모델": "국내퀀트 규모 페널티",
+                "현재 설정": f"국내퀀트 시작비중 {INITIAL_QUANT_ASSET_MANWON/(INITIAL_QUANT_ASSET_MANWON+INITIAL_DUAL_MOMENTUM_ASSET_MANWON+INITIAL_VOO_ASSET_MANWON)*100:.1f}% 기준 추정",
+                "의미": "총자산 모델에서도 국내퀀트 비중을 추정해 규모별 수익률 차감만 반영합니다.",
             },
             {
                 "모델": "주택·연금·세금 처리",
@@ -522,7 +483,6 @@ def render_applied_model_section(res):
 
     with st.expander("🧩 자동 적용 모델과 해석", expanded=True):
         st.dataframe(model_df, use_container_width=True, hide_index=True)
-
 
 def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire):
     final_assets = sim_assets_pv[:, -1]
@@ -591,7 +551,6 @@ def render_results_page(res):
     render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df)
     st.markdown("---")
 
-    render_account_allocation_section(res)
     render_failure_diagnostics_section(res)
     render_real_life_risk_section(res)
     render_scenario_comparison_section(res)

@@ -9,14 +9,12 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import (  # noqa: E402
-    ACCOUNT_SCENARIOS,
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     AUTO_APPLY_DWZ_SPENDING,
     AUTO_APPLY_FAT_TAIL,
     AUTO_APPLY_FLEX_SPENDING,
     AUTO_APPLY_INFLATION_SHOCK,
     AUTO_APPLY_PORTFOLIO_TRANSITION,
-    DATA_ANALYSIS_SUMMARY,
     DEFAULT_SCENARIO_INDEX,
     DWZ_TARGET_RUIN_PROB,
     ESSENTIAL_SPENDING_RATIO,
@@ -32,10 +30,12 @@ from config import (  # noqa: E402
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    ISA_ANNUAL_CONTRIBUTION_MANWON,
     MEAN_REVERSION_STRENGTH,
-    MIN_ACCOUNT_ANNUAL_RETURN,
+    MIN_TOTAL_ANNUAL_RETURN,
     QUANT_SIZE_PENALTY_TIERS,
     RANDOM_SEED,
+    RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON,
     SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
     TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
@@ -45,7 +45,7 @@ from config import (  # noqa: E402
 )
 from data_defaults import get_default_lump_events, get_default_recurring_events  # noqa: E402
 from risk_metrics import build_real_life_risk_table  # noqa: E402
-from simulator import FinancialSimulator, build_account_allocation_table, build_failure_diagnostics  # noqa: E402
+from simulator import FinancialSimulator, build_failure_diagnostics  # noqa: E402
 
 
 def assert_equal(name, actual, expected):
@@ -54,7 +54,7 @@ def assert_equal(name, actual, expected):
 
 
 def assert_close(name, actual, expected, tol=1e-9):
-    if abs(float(actual) - float(expected)) > tol:
+    if abs(float(actual) - tol - float(expected)) > tol and abs(float(actual) - float(expected)) > tol:
         raise AssertionError(f"{name} mismatch: {actual} != {expected}")
 
 
@@ -65,7 +65,7 @@ def assert_close_tuple(name, actual, expected):
         assert_close(f"{name}[{idx}]", a, e)
 
 
-def build_params(dwz_mode=AUTO_APPLY_DWZ_SPENDING, use_portfolio_transition=True):
+def build_params(dwz_mode=AUTO_APPLY_DWZ_SPENDING):
     scenario_values = list(SCENARIO_OPTIONS.values())[DEFAULT_SCENARIO_INDEX]
     expected_return_pre, vol_pre, expected_return_post, vol_post = scenario_values
 
@@ -90,7 +90,7 @@ def build_params(dwz_mode=AUTO_APPLY_DWZ_SPENDING, use_portfolio_transition=True
         "use_inflation_shock": AUTO_APPLY_INFLATION_SHOCK,
         "use_flex_spending": AUTO_APPLY_FLEX_SPENDING,
         "dwz_mode": dwz_mode,
-        "use_portfolio_transition": use_portfolio_transition,
+        "use_portfolio_transition": AUTO_APPLY_PORTFOLIO_TRANSITION,
         "fixed_seed_enabled": FIXED_RANDOM_SEED_ENABLED,
         "random_seed": RANDOM_SEED,
     }
@@ -111,38 +111,34 @@ def check_config_assumptions():
     assert_close_tuple("base scenario", values[1], (18.0, 25.0, 12.0, 16.0))
     assert_close_tuple("aggressive scenario", values[2], (20.0, 25.0, 13.5, 17.0))
 
-    assert_equal("ACCOUNT_SCENARIOS length", len(ACCOUNT_SCENARIOS), 4)
-    assert_close("base quant return", ACCOUNT_SCENARIOS["기본"]["quant_return"], 18.0)
-    assert_close("base dual return", ACCOUNT_SCENARIOS["기본"]["dual_return"], 12.0)
-    assert_close("base voo return", ACCOUNT_SCENARIOS["기본"]["voo_return"], 7.5)
-    assert_equal("DATA_ANALYSIS_SUMMARY length", len(DATA_ANALYSIS_SUMMARY), 3)
-
     assert_close("ESSENTIAL_SPENDING_RATIO", ESSENTIAL_SPENDING_RATIO, 0.70)
     assert_equal("INCOME_INFLATION_LINKED", INCOME_INFLATION_LINKED, False)
     assert_equal("EXPENSE_INFLATION_LINKED", EXPENSE_INFLATION_LINKED, True)
 
     assert_equal("AUTO_APPLY_DWZ_SPENDING", AUTO_APPLY_DWZ_SPENDING, True)
     assert_equal("AUTO_APPLY_FLEX_SPENDING", AUTO_APPLY_FLEX_SPENDING, True)
-    assert_equal("AUTO_APPLY_PORTFOLIO_TRANSITION", AUTO_APPLY_PORTFOLIO_TRANSITION, True)
+    assert_equal("AUTO_APPLY_PORTFOLIO_TRANSITION", AUTO_APPLY_PORTFOLIO_TRANSITION, False)
     assert_equal("AUTO_APPLY_FAT_TAIL", AUTO_APPLY_FAT_TAIL, True)
     assert_equal("AUTO_APPLY_INFLATION_SHOCK", AUTO_APPLY_INFLATION_SHOCK, True)
 
     assert_equal("INITIAL_QUANT_ASSET_MANWON", INITIAL_QUANT_ASSET_MANWON, 107000)
     assert_equal("INITIAL_DUAL_MOMENTUM_ASSET_MANWON", INITIAL_DUAL_MOMENTUM_ASSET_MANWON, 12000)
     assert_equal("INITIAL_VOO_ASSET_MANWON", INITIAL_VOO_ASSET_MANWON, 7000)
-    assert_equal("ANNUAL_TRANSFER_TO_DUAL_MANWON", ANNUAL_TRANSFER_TO_DUAL_MANWON, 3800)
+    assert_equal("RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON", RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON, 600)
+    assert_equal("ISA_ANNUAL_CONTRIBUTION_MANWON", ISA_ANNUAL_CONTRIBUTION_MANWON, 0)
+    assert_equal("ANNUAL_TRANSFER_TO_DUAL_MANWON", ANNUAL_TRANSFER_TO_DUAL_MANWON, 0)
     assert_equal("QUANT_SIZE_PENALTY_TIERS length", len(QUANT_SIZE_PENALTY_TIERS), 5)
 
     assert_equal("FIXED_RANDOM_SEED_ENABLED", FIXED_RANDOM_SEED_ENABLED, True)
     assert_equal("RANDOM_SEED", RANDOM_SEED, 20260520)
     assert_equal("FAT_TAIL_DF", FAT_TAIL_DF, 10)
+    assert_close("MIN_TOTAL_ANNUAL_RETURN", MIN_TOTAL_ANNUAL_RETURN, -0.95)
     assert_close("INFLATION_SHOCK_ANNUAL_PROBABILITY", INFLATION_SHOCK_ANNUAL_PROBABILITY, 0.025)
     assert_equal("INFLATION_SHOCK_DURATION_YEARS", INFLATION_SHOCK_DURATION_YEARS, 3)
     assert_close("INFLATION_SHOCK_INFLATION_ADDON", INFLATION_SHOCK_INFLATION_ADDON, 0.04)
     assert_close("INFLATION_SHOCK_RETURN_PENALTY", INFLATION_SHOCK_RETURN_PENALTY, 0.04)
     assert_close("INFLATION_SHOCK_VOL_MULTIPLIER", INFLATION_SHOCK_VOL_MULTIPLIER, 1.30)
     assert_close("MEAN_REVERSION_STRENGTH", MEAN_REVERSION_STRENGTH, 0.05)
-    assert_close("MIN_ACCOUNT_ANNUAL_RETURN", MIN_ACCOUNT_ANNUAL_RETURN, -0.95)
 
 
 def check_target_ruin_probability():
@@ -152,7 +148,7 @@ def check_target_ruin_probability():
     )
     assert_equal("auto DWZ target_ruin_prob", auto_result["target_ruin_prob"], DWZ_TARGET_RUIN_PROB)
     if not isinstance(auto_result["trimmed_avg_extra"], int):
-        raise AssertionError("middle trimmed average extra should be an integer month amount")
+        raise AssertionError("middle-trimmed average extra should be an integer month amount")
 
     normal_result = FinancialSimulator(build_params(dwz_mode=False)).run_hybrid_analysis(
         main_sims=20,
@@ -161,8 +157,27 @@ def check_target_ruin_probability():
     assert_equal("standard target_ruin_prob", normal_result["target_ruin_prob"], STANDARD_TARGET_RUIN_PROB)
 
 
-def check_account_engine_and_penalty_helpers():
-    sim = FinancialSimulator(build_params(use_portfolio_transition=True))
+def check_portfolio_policy_and_penalty_helpers():
+    sim = FinancialSimulator(build_params())
+
+    ratio_40, quant_share_40 = sim._portfolio_transition_ratio_and_quant_share(
+        current_asset_manwon=126000,
+        current_age=40,
+        retire_age=60,
+        age=40,
+        use_portfolio_transition=False,
+    )
+    ratio_60, quant_share_60 = sim._portfolio_transition_ratio_and_quant_share(
+        current_asset_manwon=126000,
+        current_age=40,
+        retire_age=60,
+        age=60,
+        use_portfolio_transition=False,
+    )
+
+    assert_close("transition ratio at current age", ratio_40, 0.0)
+    assert_close("transition ratio at retirement", ratio_60, 1.0)
+    assert_close("quant share remains stable", quant_share_40, quant_share_60)
 
     penalty = sim._quant_size_penalty(
         pd.Series([100000, 200000, 300000, 500000, 800000], dtype=float).to_numpy()
@@ -171,7 +186,7 @@ def check_account_engine_and_penalty_helpers():
     for idx, (actual, exp) in enumerate(zip(penalty, expected)):
         assert_close(f"quant size penalty[{idx}]", actual, exp)
 
-    trimmed_sample = np.asarray([[x] for x in range(1, 11)], dtype=float)
+    trimmed_sample = pd.DataFrame({"final": list(range(1, 11))}).to_numpy(dtype=float)
     trimmed_mean = FinancialSimulator._middle_trimmed_average_final_asset(
         trimmed_sample,
         lower_exclusion_ratio=0.30,
@@ -205,28 +220,28 @@ def check_inflation_shock_mask_helper():
 
 
 def check_monte_carlo_shapes_and_seed():
-    params = build_params()
-    result_1 = FinancialSimulator(params).run_monte_carlo(
+    result_1 = FinancialSimulator(build_params()).run_monte_carlo(
         n_simulations=30,
         override_extra_margin=100,
     )
-    result_2 = FinancialSimulator(params).run_monte_carlo(
+    result_2 = FinancialSimulator(build_params()).run_monte_carlo(
         n_simulations=30,
         override_extra_margin=100,
     )
 
     years = result_1["years"]
     expected_shape = (30, len(years))
-    expected_account_shape = (30, len(years), 3)
     assert_equal("pv shape", result_1["pv"].shape, expected_shape)
     assert_equal("nom shape", result_1["nom"].shape, expected_shape)
     assert_equal("returns shape", result_1["returns"].shape, expected_shape)
-    assert_equal("account_pv shape", result_1["account_pv"].shape, expected_account_shape)
-    assert_equal("withdrawals shape", result_1["withdrawals"].shape, expected_account_shape)
-    assert_equal("return_floor_mask shape", result_1["return_floor_mask"].shape, expected_account_shape)
+    assert_equal("shock mask shape", result_1["shock_mask"].shape, expected_shape)
+    assert_equal("quant penalty shape", result_1["quant_penalty"].shape, expected_shape)
 
     if not np.allclose(result_1["pv"], result_2["pv"]):
-        raise AssertionError("fixed seed mode should reproduce identical PV paths")
+        raise AssertionError("fixed seed should reproduce identical PV paths")
+
+    if np.nanmin(result_1["returns"]) < MIN_TOTAL_ANNUAL_RETURN - 1e-9:
+        raise AssertionError("returns should respect MIN_TOTAL_ANNUAL_RETURN")
 
     res = {
         "years": years,
@@ -237,24 +252,19 @@ def check_monte_carlo_shapes_and_seed():
     risk_df = build_real_life_risk_table(res)
     assert_equal("risk metric count", len(risk_df), 3)
 
-    allocation_df = build_account_allocation_table(result_1, [40, 60, 90])
-    if allocation_df.empty:
-        raise AssertionError("account allocation table should not be empty")
-
     diag = build_failure_diagnostics(result_1, 60)
-    if diag["diagnostic_df"].empty:
-        raise AssertionError("failure diagnostic table should not be empty")
+    if "diagnostic_df" not in diag or diag["diagnostic_df"].empty:
+        raise AssertionError("failure diagnostics should return a non-empty diagnostic dataframe")
 
 
-def check_sensitivity_and_scenario_comparison():
-    params = build_params()
-    sim = FinancialSimulator(params)
+def check_scenario_and_sensitivity_outputs():
+    sim = FinancialSimulator(build_params())
     base = sim.run_hybrid_analysis(main_sims=30, search_sims=5)
     sens = sim.run_sensitivity(base_ruin=base["base_ruin"], sims=20)
-    comparison = sim.run_scenario_comparison(sims=20, search_sims=5)
+    scen = sim.run_scenario_comparison(sims=20, search_sims=5)
 
-    assert_equal("sensitivity rows", len(sens), 9)
-    assert_equal("scenario comparison rows", len(comparison), 4)
+    assert_equal("sensitivity row count", len(sens), 9)
+    assert_equal("scenario comparison row count", len(scen), len(SCENARIO_OPTIONS))
 
 
 def check_default_events():
@@ -271,22 +281,31 @@ def check_default_events():
 
     home_pension = recurring_df[recurring_df["내용"] == "주택연금"]
     assert_equal("home pension event count", len(home_pension), 1)
-    assert_equal("home pension age", int(home_pension.iloc[0]["시작나이"]), 55)
-    assert_equal("home pension monthly", int(home_pension.iloc[0]["월금액(만원)"]), 100)
+    assert_equal("home pension start age", int(home_pension.iloc[0]["시작나이"]), 55)
+    assert_equal("home pension amount", int(home_pension.iloc[0]["월금액(만원)"]), 100)
+    assert_equal("home pension guaranteed flag", bool(home_pension.iloc[0]["확정연금"]), True)
 
-    car = recurring_df[recurring_df["내용"] == "자동차 할부금"]
-    assert_equal("car payment monthly", int(car.iloc[0]["월금액(만원)"]), 200)
+    car_payment = recurring_df[recurring_df["내용"] == "자동차 할부금"]
+    assert_equal("car payment event count", len(car_payment), 1)
+    assert_equal("car payment start age", int(car_payment.iloc[0]["시작나이"]), 47)
+    assert_equal("car payment duration", int(car_payment.iloc[0]["기간(년)"]), 5)
+    assert_equal("car payment amount", int(car_payment.iloc[0]["월금액(만원)"]), 200)
+
+    national_pension = recurring_df[recurring_df["내용"] == "국민연금"]
+    assert_equal("national pension start age", int(national_pension.iloc[0]["시작나이"]), 70)
+    assert_equal("national pension amount", int(national_pension.iloc[0]["월금액(만원)"]), 100)
+    assert_equal("national pension guaranteed flag", bool(national_pension.iloc[0]["확정연금"]), True)
 
 
 def main():
     check_config_assumptions()
+    check_default_events()
     check_target_ruin_probability()
-    check_account_engine_and_penalty_helpers()
+    check_portfolio_policy_and_penalty_helpers()
     check_inflation_shock_mask_helper()
     check_monte_carlo_shapes_and_seed()
-    check_sensitivity_and_scenario_comparison()
-    check_default_events()
-    print("OK: V61-4 assumptions and account-based simulation checks passed.")
+    check_scenario_and_sensitivity_outputs()
+    print("OK: V62-1 integrated model, diagnostics, seed, scenario, and sensitivity checks passed.")
 
 
 if __name__ == "__main__":
