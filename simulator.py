@@ -242,12 +242,13 @@ class FinancialSimulator:
         recurring_df = self.params["recurring_events"]
         lump_df = self.params["lump_events"]
 
-        # 소득은 명목 고정, 지출은 현재가치 입력 후 물가연동으로 처리합니다.
-        # 이 원칙은 기본 월수입/월지출뿐 아니라 기간성 이벤트에도 동일하게 적용합니다.
+        # 기본 월수입과 일반 기간성 수입은 명목 고정으로 처리합니다.
+        # 확정연금성 수입과 지출·목돈 이벤트는 현재가치 기준 입력으로 보고 명목금액에 물가를 반영합니다.
+        pv_extra_income = np.zeros(simulation_years)
         pv_extra_expense = np.zeros(simulation_years)
         nom_extra_income = np.zeros(simulation_years)
+        pv_lump_income = np.zeros(simulation_years)
         pv_lump_expense = np.zeros(simulation_years)
-        nom_lump_income = np.zeros(simulation_years)
 
         for t, age in enumerate(years):
             if not recurring_df.empty:
@@ -255,7 +256,10 @@ class FinancialSimulator:
                     if row["시작나이"] <= age < row["시작나이"] + row["기간(년)"]:
                         amt_val = abs(row["월금액(만원)"]) * 10000 * 12
                         if row["유형"] == "수입":
-                            nom_extra_income[t] += amt_val
+                            if bool(row.get("확정연금", False)):
+                                pv_extra_income[t] += amt_val
+                            else:
+                                nom_extra_income[t] += amt_val
                         else:
                             pv_extra_expense[t] += amt_val
             if not lump_df.empty:
@@ -263,7 +267,7 @@ class FinancialSimulator:
                     if row["나이"] == age:
                         amt_val = abs(row["금액(만원)"]) * 10000
                         if row["유형"] == "수입":
-                            nom_lump_income[t] += amt_val
+                            pv_lump_income[t] += amt_val
                         else:
                             pv_lump_expense[t] += amt_val
 
@@ -309,9 +313,9 @@ class FinancialSimulator:
         for t, age in enumerate(years):
             df_factor = discount_factors[:, t]
 
-            extra_inc = nom_extra_income[t]
+            extra_inc = nom_extra_income[t] + (pv_extra_income[t] * df_factor)
             extra_exp = pv_extra_expense[t] * df_factor
-            nom_lump = nom_lump_income[t] - (pv_lump_expense[t] * df_factor)
+            nom_lump = (pv_lump_income[t] * df_factor) - (pv_lump_expense[t] * df_factor)
 
             is_retired = age >= self.params["retire_age"]
             if not is_retired:

@@ -35,6 +35,7 @@ from config import (  # noqa: E402
     WARNING_RUIN_PROB,
 )
 from risk_metrics import build_real_life_risk_table  # noqa: E402
+from data_defaults import get_default_lump_events, get_default_recurring_events  # noqa: E402
 from simulator import FinancialSimulator  # noqa: E402
 
 
@@ -206,13 +207,38 @@ def check_monte_carlo_shapes():
     assert_equal("risk metric count", len(risk_df), 3)
 
 
+
+def check_default_events():
+    lump_df = get_default_lump_events()
+    recurring_df = get_default_recurring_events()
+
+    if lump_df["내용"].astype(str).str.contains("증여").any():
+        raise AssertionError("default gift events should be removed")
+
+    housing = lump_df[lump_df["내용"] == "주택구입"]
+    assert_equal("housing purchase event count", len(housing), 1)
+    assert_equal("housing purchase age", int(housing.iloc[0]["나이"]), 45)
+    assert_equal("housing purchase amount", int(housing.iloc[0]["금액(만원)"]), 32000)
+
+    home_pension = recurring_df[recurring_df["내용"] == "주택연금"]
+    assert_equal("home pension event count", len(home_pension), 1)
+    assert_equal("home pension start age", int(home_pension.iloc[0]["시작나이"]), 55)
+    assert_equal("home pension amount", int(home_pension.iloc[0]["월금액(만원)"]), 100)
+    assert_equal("home pension guaranteed flag", bool(home_pension.iloc[0]["확정연금"]), True)
+
+    national_pension = recurring_df[recurring_df["내용"] == "국민연금"]
+    assert_equal("national pension start age", int(national_pension.iloc[0]["시작나이"]), 70)
+    assert_equal("national pension amount", int(national_pension.iloc[0]["월금액(만원)"]), 100)
+    assert_equal("national pension guaranteed flag", bool(national_pension.iloc[0]["확정연금"]), True)
+
 def main():
     check_config_assumptions()
+    check_default_events()
     check_target_ruin_probability()
     check_portfolio_transition_and_penalty_helpers()
     check_inflation_shock_mask_helper()
     check_monte_carlo_shapes()
-    print("OK: UI simplification and automatic model assumptions checks passed.")
+    print("OK: event defaults and automatic model assumptions checks passed.")
 
 
 if __name__ == "__main__":

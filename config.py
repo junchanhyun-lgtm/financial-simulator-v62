@@ -1,12 +1,12 @@
-APP_VERSION = "V60-4"
+APP_VERSION = "V60-5"
 
-PAGE_TITLE = "My Quant Asset Sim (V60-4)"
+PAGE_TITLE = "My Quant Asset Sim (V60-5)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-4)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-5)"
 
 UPDATE_MESSAGE = (
-    "💡 V60-4 업데이트: 입력 토글을 제거하고, 현실 리스크 3대 지표와 "
-    "현재가치 기준 결과 화면 중심으로 UI를 정리"
+    "💡 V60-5 업데이트: 기본 이벤트를 정리하고, 주택·연금·건보료·세금 처리 원칙을 "
+    "현재가치 기준으로 명확화"
 )
 
 N_SIMULATIONS = 5000
