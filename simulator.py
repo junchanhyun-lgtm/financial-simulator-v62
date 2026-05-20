@@ -16,6 +16,9 @@ from config import (
     MEAN_REVERSION_STRENGTH,
     QUANT_SIZE_PENALTY_TIERS,
     STANDARD_TARGET_RUIN_PROB,
+    TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
+    TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
+    TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO,
 )
 
 
@@ -367,6 +370,32 @@ class FinancialSimulator:
 
         return years, sim_assets_pv, sim_assets_nom, sim_returns
 
+    @staticmethod
+    def _middle_trimmed_average_final_asset(
+        sim_assets_pv,
+        lower_exclusion_ratio=TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
+        upper_exclusion_ratio=TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO,
+    ):
+        """최종 현재가치 자산에서 상하위 극단 경로를 제외한 평균을 계산합니다."""
+        final_assets = np.asarray(sim_assets_pv)[:, -1]
+        if final_assets.size == 0:
+            return 0.0
+
+        lower_exclusion_ratio = float(np.clip(lower_exclusion_ratio, 0.0, 0.49))
+        upper_exclusion_ratio = float(np.clip(upper_exclusion_ratio, 0.0, 0.49))
+
+        sorted_assets = np.sort(final_assets)
+        n_assets = sorted_assets.size
+        lower_cut = int(np.floor(n_assets * lower_exclusion_ratio))
+        upper_cut = int(np.floor(n_assets * upper_exclusion_ratio))
+        start_idx = lower_cut
+        end_idx = n_assets - upper_cut
+
+        if start_idx >= end_idx:
+            return float(np.median(sorted_assets))
+
+        return float(np.mean(sorted_assets[start_idx:end_idx]))
+
     def run_hybrid_analysis(self, main_sims=5000, search_sims=1000):
         is_dwz = self.params.get("dwz_mode", False)
         target_ruin_prob = DWZ_TARGET_RUIN_PROB if is_dwz else STANDARD_TARGET_RUIN_PROB
@@ -395,6 +424,27 @@ class FinancialSimulator:
                 else:
                     high = mid
             safe_extra = int(best_extra)
+
+        trimmed_avg_extra = 0
+        final_asset_floor = TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON * 10000.0
+        base_trimmed_avg = self._middle_trimmed_average_final_asset(main_pv)
+
+        if base_trimmed_avg >= final_asset_floor:
+            low, high = 0, 5000
+            best_extra = 0
+            for _ in range(8):
+                mid = (low + high) / 2
+                _, pv, _, _ = self.run_monte_carlo(
+                    n_simulations=search_sims,
+                    override_extra_margin=mid,
+                )
+                trimmed_avg = self._middle_trimmed_average_final_asset(pv)
+                if trimmed_avg >= final_asset_floor:
+                    best_extra = mid
+                    low = mid
+                else:
+                    high = mid
+            trimmed_avg_extra = int(best_extra)
 
         incs_set = {0}
         if safe_extra > 0:
@@ -438,6 +488,7 @@ class FinancialSimulator:
             safe_extra,
             base_ruin,
             pd.DataFrame(results),
+            trimmed_avg_extra,
             target_ruin_prob,
         )
 

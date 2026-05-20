@@ -16,6 +16,7 @@ def run_simulation_analysis(
         safe_extra,
         base_ruin,
         stress_df,
+        trimmed_avg_extra,
         t_ruin,
     ) = simulator.run_hybrid_analysis(
         main_sims=main_sims,
@@ -47,6 +48,7 @@ def run_simulation_analysis(
         "safe_extra": safe_extra,
         "base_ruin": base_ruin,
         "stress_df": stress_df,
+        "trimmed_avg_extra": trimmed_avg_extra,
         "t_ruin": t_ruin,
         "defense_rate": defense_rate,
     }

@@ -21,6 +21,10 @@ from config import (
     INITIAL_VOO_ASSET_MANWON,
     MEAN_REVERSION_STRENGTH,
     STANDARD_TARGET_RUIN_PROB,
+    TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
+    TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
+    TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO,
+    QUANT_SIZE_PENALTY_TIERS,
     WARNING_RUIN_PROB,
 )
 from risk_metrics import build_real_life_risk_table
@@ -85,6 +89,7 @@ def render_top_summary_section(res):
     base_ruin = res["base_ruin"]
     target_ruin = res["t_ruin"]
     safe_extra = res["safe_extra"]
+    trimmed_avg_extra = res.get("trimmed_avg_extra", 0)
     tgt_retire = res["retire_age"]
 
     retire_idx = _safe_age_index(years, tgt_retire)
@@ -99,7 +104,7 @@ def render_top_summary_section(res):
 
     st.info("💡 아래의 자산·지출·추가사용 가능액은 모두 현시점 구매력, 즉 현재가치 기준입니다.")
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3 = st.columns(3)
     m1.metric(
         "파산확률",
         f"{base_ruin:.1f}%",
@@ -107,18 +112,31 @@ def render_top_summary_section(res):
         delta_color=delta_color,
     )
     m2.metric(
-        "월 추가 사용 가능액",
+        "안전 여유자금",
         f"{safe_extra:,}만 원" if safe_extra > 0 else "0만 원",
         f"DWZ {target_ruin:.0f}% 방어선",
         delta_color="off",
     )
     m3.metric(
+        "상하위 30% 제외 평균 여유자금",
+        f"{trimmed_avg_extra:,}만 원" if trimmed_avg_extra > 0 else "0만 원",
+        f"최종자산 평균 {TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON/10000:.0f}억 이상",
+        delta_color="off",
+    )
+
+    st.caption(
+        "안전 여유자금은 실제 소비 판단 기준입니다. "
+        "상하위 30% 제외 평균 여유자금은 극단적으로 나쁘거나 좋은 경로를 모두 제거한 참고값입니다."
+    )
+
+    a1, a2 = st.columns(2)
+    a1.metric(
         f"{tgt_retire}세 자산",
         _fmt_eok(median_retire_asset),
         f"하위 10%: {_fmt_eok(p10_retire_asset)}",
         delta_color="off",
     )
-    m4.metric(
+    a2.metric(
         f"{years[-1]}세 자산",
         _fmt_eok(median_final_asset),
         "중앙값 · 현재가치",
@@ -139,7 +157,6 @@ def render_top_summary_section(res):
         st.warning(f"⚠️ 안전 기준은 넘지만 DWZ 허용 범위 안입니다. {threshold_text}")
     else:
         st.success(f"✅ 안전 기준을 통과했습니다. {threshold_text}")
-
 
 def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df):
     st.markdown(f"##### 📈 현재가치 자산 궤적 ({tgt_retire}세 은퇴 기준)")
@@ -290,42 +307,77 @@ def render_stress_budget_section(stress_df, target_ruin):
 
 
 def render_applied_model_section(defense_rate):
+    penalty_text = " / ".join(
+        [
+            "15억 이하 0%",
+            "15~25억 0.3%",
+            "25~40억 0.7%",
+            "40~70억 1.2%",
+            "70억 초과 1.8%",
+        ]
+    )
+
     model_df = pd.DataFrame(
         [
             {
                 "모델": "결과 표시 기준",
-                "현재 설정": "모든 결과 현재가치",
-                "의미": "인플레이션을 역산한 현시점 구매력 기준으로 자산과 지출을 표시합니다.",
+                "현재 설정": "모든 금액 현재가치",
+                "의미": "인플레이션을 역산한 현시점 구매력 기준으로 자산·지출·연금·추가사용액을 표시합니다.",
             },
             {
                 "모델": "소득·지출 물가 처리",
-                "현재 설정": "기본수입 명목고정 / 지출·확정연금 현재가치",
-                "의미": "근로·사업 수입은 명목 고정, 지출과 확정연금성 수입은 현재가치 기준으로 반영합니다.",
+                "현재 설정": "기본수입 명목고정 / 지출 현재가치",
+                "의미": "근로·사업 수입은 물가만큼 자동 증가하지 않고, 지출은 현재 생활수준을 유지하는 것으로 봅니다.",
+            },
+            {
+                "모델": "파산확률 판단 기준",
+                "현재 설정": f"안전 {STANDARD_TARGET_RUIN_PROB:.0f}% / DWZ {DWZ_TARGET_RUIN_PROB:.0f}% / 경고 {WARNING_RUIN_PROB:.0f}%",
+                "의미": "안전 기준과 DWZ 허용 기준을 동시에 보여주며, 20% 이상은 지출·은퇴시점 재검토 구간입니다.",
+            },
+            {
+                "모델": "여유자금 산출",
+                "현재 설정": f"안전 기준 + 상하위 {TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO*100:.0f}% 제외 평균 기준",
+                "의미": f"참고 여유자금은 극단 경로를 제외한 중앙부 최종 현재가치 평균이 {TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON/10000:.0f}억 원 이상 남는 수준입니다.",
+            },
+            {
+                "모델": "수익률 시나리오",
+                "현재 설정": "보수 / 기본 / 공격 3단계",
+                "의미": "국내퀀트·듀얼모멘텀·VOO 현재 비중과 백테스트 할인값을 반영한 은퇴 전후 수익률·변동성 가정입니다.",
             },
             {
                 "모델": "수익률 분포",
                 "현재 설정": f"팻테일 df={FAT_TAIL_DF}, 평균회귀 {MEAN_REVERSION_STRENGTH * 100:.1f}%",
-                "의미": "극단 손실 가능성을 반영하되, 폭락 후 자동 회복 가정은 약하게 둡니다.",
+                "의미": "정규분포보다 극단 손실을 더 반영하되, 폭락 후 자동 회복 가정은 약하게 둡니다.",
             },
             {
                 "모델": "고물가 쇼크",
-                "현재 설정": f"연 {INFLATION_SHOCK_ANNUAL_PROBABILITY * 100:.1f}% / {INFLATION_SHOCK_DURATION_YEARS}년",
+                "현재 설정": f"연 {INFLATION_SHOCK_ANNUAL_PROBABILITY * 100:.1f}% / {INFLATION_SHOCK_DURATION_YEARS}년 지속",
                 "의미": f"쇼크 중 물가 +{INFLATION_SHOCK_INFLATION_ADDON * 100:.1f}%p, 수익률 -{INFLATION_SHOCK_RETURN_PENALTY * 100:.1f}%p, 변동성 {INFLATION_SHOCK_VOL_MULTIPLIER:.1f}배를 적용합니다.",
             },
             {
                 "모델": "DWZ 지출 구조",
                 "현재 설정": f"필수 {ESSENTIAL_SPENDING_RATIO * 100:.0f}% / 조정가능 {FLEXIBLE_SPENDING_RATIO * 100:.0f}%",
-                "의미": "나이와 시장 하락에 따른 긴축은 조정가능지출에만 적용합니다.",
+                "의미": "나이와 시장 하락에 따른 긴축은 조정가능지출에만 적용하고, 필수지출은 자동 삭감하지 않습니다.",
+            },
+            {
+                "모델": "시장 하락 시 지출 긴축",
+                "현재 설정": "조정가능지출만 단계 축소",
+                "의미": "시장 낙폭이 커질수록 여행·외식·취미 등 조정가능지출만 줄이고, 필수지출과 이벤트 지출은 유지합니다.",
             },
             {
                 "모델": "포트폴리오 전환",
-                "현재 설정": f"연 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원 이동",
-                "의미": f"은퇴 전까지 국내퀀트 {INITIAL_QUANT_ASSET_MANWON/10000:.1f}억 기준에서 연금저축+ISA로 이체합니다.",
+                "현재 설정": f"은퇴 전까지 연 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원 이동",
+                "의미": f"국내퀀트 {INITIAL_QUANT_ASSET_MANWON/10000:.1f}억, 듀얼모멘텀 {INITIAL_DUAL_MOMENTUM_ASSET_MANWON/10000:.1f}억, VOO {INITIAL_VOO_ASSET_MANWON/10000:.1f}억 기준으로 국내퀀트에서 연금저축+ISA로 이체합니다.",
+            },
+            {
+                "모델": "국내퀀트 운용규모 페널티",
+                "현재 설정": penalty_text,
+                "의미": "총자산이 아니라 국내퀀트 추정 운용금액 기준으로, 규모가 커질수록 수익률을 단계적으로 차감합니다.",
             },
             {
                 "모델": "주택·연금·세금 처리",
-                "현재 설정": "주택은 지출·연금은 수입·세금/건보료는 이벤트",
-                "의미": "주택구입은 금융자산의 비유동자산 전환으로, 주택연금·국민연금은 현재가치 수입으로 처리합니다.",
+                "현재 설정": "주택은 지출 / 연금은 수입 / 세금·건보료는 이벤트",
+                "의미": "주택구입은 금융자산의 비유동자산 전환, 주택연금·국민연금은 현재가치 수입, 건보료·세금은 보수적 지출 이벤트로 처리합니다.",
             },
             {
                 "모델": "확정연금 방어율",
@@ -335,9 +387,8 @@ def render_applied_model_section(defense_rate):
         ]
     )
 
-    with st.expander("🧩 적용된 모델과 해석", expanded=True):
+    with st.expander("🧩 자동 적용 모델과 해석", expanded=True):
         st.dataframe(model_df, use_container_width=True, hide_index=True)
-
 
 def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire):
     final_assets = sim_assets_pv[:, -1]

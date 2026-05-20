@@ -32,6 +32,9 @@ from config import (  # noqa: E402
     QUANT_SIZE_PENALTY_TIERS,
     SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
+    TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
+    TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
+    TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO,
     WARNING_RUIN_PROB,
 )
 from risk_metrics import build_real_life_risk_table  # noqa: E402
@@ -89,6 +92,9 @@ def check_config_assumptions():
     assert_equal("STANDARD_TARGET_RUIN_PROB", STANDARD_TARGET_RUIN_PROB, 10.0)
     assert_equal("DWZ_TARGET_RUIN_PROB", DWZ_TARGET_RUIN_PROB, 15.0)
     assert_equal("WARNING_RUIN_PROB", WARNING_RUIN_PROB, 20.0)
+    assert_close("TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO", TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO, 0.30)
+    assert_close("TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO", TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO, 0.30)
+    assert_equal("TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON", TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON, 10000)
     assert_equal("DEFAULT_SCENARIO_INDEX", DEFAULT_SCENARIO_INDEX, 1)
     assert_equal("SCENARIO_OPTIONS length", len(SCENARIO_OPTIONS), 3)
 
@@ -127,7 +133,10 @@ def check_target_ruin_probability():
         main_sims=20,
         search_sims=5,
     )
+    assert_equal("hybrid analysis tuple length", len(auto_result), 9)
     assert_equal("auto DWZ target_ruin_prob", auto_result[-1], DWZ_TARGET_RUIN_PROB)
+    if not isinstance(auto_result[-2], int):
+        raise AssertionError("top excluded average extra should be an integer month amount")
 
     normal_result = FinancialSimulator(build_params(dwz_mode=False)).run_hybrid_analysis(
         main_sims=20,
@@ -165,6 +174,14 @@ def check_portfolio_transition_and_penalty_helpers():
     expected = [0.000, 0.003, 0.007, 0.012, 0.018]
     for idx, (actual, exp) in enumerate(zip(penalty, expected)):
         assert_close(f"quant size penalty[{idx}]", actual, exp)
+
+    trimmed_sample = pd.DataFrame({"final": list(range(1, 11))}).to_numpy(dtype=float)
+    trimmed_mean = FinancialSimulator._middle_trimmed_average_final_asset(
+        trimmed_sample,
+        lower_exclusion_ratio=0.30,
+        upper_exclusion_ratio=0.30,
+    )
+    assert_close("middle trimmed average helper", trimmed_mean, 5.5)
 
 
 def check_inflation_shock_mask_helper():
@@ -226,6 +243,12 @@ def check_default_events():
     assert_equal("home pension amount", int(home_pension.iloc[0]["월금액(만원)"]), 100)
     assert_equal("home pension guaranteed flag", bool(home_pension.iloc[0]["확정연금"]), True)
 
+    car_payment = recurring_df[recurring_df["내용"] == "자동차 할부금"]
+    assert_equal("car payment event count", len(car_payment), 1)
+    assert_equal("car payment start age", int(car_payment.iloc[0]["시작나이"]), 47)
+    assert_equal("car payment duration", int(car_payment.iloc[0]["기간(년)"]), 5)
+    assert_equal("car payment amount", int(car_payment.iloc[0]["월금액(만원)"]), 200)
+
     national_pension = recurring_df[recurring_df["내용"] == "국민연금"]
     assert_equal("national pension start age", int(national_pension.iloc[0]["시작나이"]), 70)
     assert_equal("national pension amount", int(national_pension.iloc[0]["월금액(만원)"]), 100)
@@ -238,7 +261,7 @@ def main():
     check_portfolio_transition_and_penalty_helpers()
     check_inflation_shock_mask_helper()
     check_monte_carlo_shapes()
-    print("OK: event defaults and automatic model assumptions checks passed.")
+    print("OK: V60-7 middle-trimmed budget and automatic model checks passed.")
 
 
 if __name__ == "__main__":

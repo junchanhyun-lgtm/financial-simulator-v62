@@ -1,12 +1,12 @@
-APP_VERSION = "V60-5"
+APP_VERSION = "V60-7"
 
-PAGE_TITLE = "My Quant Asset Sim (V60-5)"
+PAGE_TITLE = "My Quant Asset Sim (V60-7)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-5)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-7)"
 
 UPDATE_MESSAGE = (
-    "💡 V60-5 업데이트: 기본 이벤트를 정리하고, 주택·연금·건보료·세금 처리 원칙을 "
-    "현재가치 기준으로 명확화"
+    "💡 V60-7 업데이트: 상하위 30% 극단 경로를 제외한 평균 여유자금과 "
+    "자동차 할부 기본값 현실화"
 )
 
 N_SIMULATIONS = 5000
@@ -47,6 +47,13 @@ FLEXIBLE_SPENDING_RATIO = 1.0 - ESSENTIAL_SPENDING_RATIO
 STANDARD_TARGET_RUIN_PROB = 10.0
 DWZ_TARGET_RUIN_PROB = 15.0
 WARNING_RUIN_PROB = 20.0
+
+# 상하위 30% 제외 평균 기준 여유자금
+# 극단적으로 나쁜 경로와 극단적으로 좋은 경로를 모두 제외하고, 중앙 40% 경로의 평균을 계산합니다.
+# 참고용 여유자금은 이 절사평균 최종자산이 현재가치 1억 원 이상 남는 월 추가지출로 계산합니다.
+TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO = 0.30
+TRIMMED_AVERAGE_UPPER_EXCLUSION_RATIO = 0.30
+TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON = 10000
 
 # 현재 포트폴리오 기준:
 # 국내 퀀트 10.7억 + 듀얼모멘텀 1.2억 + VOO 0.7억

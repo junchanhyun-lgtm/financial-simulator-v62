@@ -39,6 +39,7 @@ def main():
                 main_returns=analysis["main_returns"],
                 n_sims=N_SIMULATIONS,
                 safe_extra=analysis["safe_extra"],
+                trimmed_avg_extra=analysis["trimmed_avg_extra"],
                 base_ruin=analysis["base_ruin"],
                 stress_df=analysis["stress_df"],
                 dwz_mode=dwz_mode,
