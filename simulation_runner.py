@@ -1,3 +1,4 @@
+from config import SCENARIO_COMPARISON_SEARCH_SIMULATIONS, SCENARIO_COMPARISON_SIMULATIONS, SENSITIVITY_SIMULATIONS
 from simulator import FinancialSimulator
 
 
@@ -7,18 +8,7 @@ def run_simulation_analysis(
     search_sims,
 ):
     simulator = FinancialSimulator(params)
-
-    (
-        years,
-        main_pv,
-        main_nom,
-        main_returns,
-        safe_extra,
-        base_ruin,
-        stress_df,
-        trimmed_avg_extra,
-        t_ruin,
-    ) = simulator.run_hybrid_analysis(
+    analysis = simulator.run_hybrid_analysis(
         main_sims=main_sims,
         search_sims=search_sims,
     )
@@ -40,15 +30,22 @@ def run_simulation_analysis(
         else 0
     )
 
+    sensitivity_df = simulator.run_sensitivity(
+        base_ruin=analysis["base_ruin"],
+        sims=SENSITIVITY_SIMULATIONS,
+    )
+    scenario_comparison_df = simulator.run_scenario_comparison(
+        sims=SCENARIO_COMPARISON_SIMULATIONS,
+        search_sims=SCENARIO_COMPARISON_SEARCH_SIMULATIONS,
+    )
+
     return {
-        "years": years,
-        "main_pv": main_pv,
-        "main_nom": main_nom,
-        "main_returns": main_returns,
-        "safe_extra": safe_extra,
-        "base_ruin": base_ruin,
-        "stress_df": stress_df,
-        "trimmed_avg_extra": trimmed_avg_extra,
-        "t_ruin": t_ruin,
+        **analysis,
+        "main_pv": analysis["pv"],
+        "main_nom": analysis["nom"],
+        "main_returns": analysis["returns"],
+        "t_ruin": analysis["target_ruin_prob"],
         "defense_rate": defense_rate,
+        "sensitivity_df": sensitivity_df,
+        "scenario_comparison_df": scenario_comparison_df,
     }

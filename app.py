@@ -25,7 +25,7 @@ def main():
         st.divider()
         params = build_simulation_params(input_values)
 
-        with st.spinner("몬테카를로 시뮬레이션 및 추가지출 방어선 계산 중..."):
+        with st.spinner("계좌별 몬테카를로, 원인분해, 시나리오 비교, 민감도 분석 수행 중..."):
             analysis = run_simulation_analysis(
                 params=params,
                 main_sims=N_SIMULATIONS,
@@ -47,6 +47,23 @@ def main():
                 defense_rate=analysis["defense_rate"],
                 clean_lump_df=clean_lump_df,
                 retire_age=retire_age,
+                account_pv=analysis.get("account_pv"),
+                account_nom=analysis.get("account_nom"),
+                initial_account_pv=analysis.get("initial_account_pv"),
+                initial_account_nom=analysis.get("initial_account_nom"),
+                account_returns=analysis.get("account_returns"),
+                shock_mask=analysis.get("shock_mask"),
+                inflation_matrix=analysis.get("inflation_matrix"),
+                quant_penalty=analysis.get("quant_penalty"),
+                transfers=analysis.get("transfers"),
+                withdrawals=analysis.get("withdrawals"),
+                return_floor_mask=analysis.get("return_floor_mask"),
+                spending_pv=analysis.get("spending_pv"),
+                market_index=analysis.get("market_index"),
+                scenario_name=analysis.get("scenario_name"),
+                scenario=analysis.get("scenario"),
+                sensitivity_df=analysis.get("sensitivity_df"),
+                scenario_comparison_df=analysis.get("scenario_comparison_df"),
             )
 
     if "sim_results" in st.session_state:
