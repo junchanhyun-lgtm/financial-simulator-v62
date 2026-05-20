@@ -1,6 +1,15 @@
 import streamlit as st
 
-from config import SCENARIO_OPTIONS, DEFAULT_SCENARIO_INDEX
+from config import (
+    ANNUAL_TRANSFER_TO_DUAL_MANWON,
+    DEFAULT_SCENARIO_INDEX,
+    DEFAULT_SPENDING_PROFILE_INDEX,
+    INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
+    INITIAL_QUANT_ASSET_MANWON,
+    INITIAL_VOO_ASSET_MANWON,
+    SCENARIO_OPTIONS,
+    SPENDING_PROFILE_OPTIONS,
+)
 from data_defaults import get_default_lump_events, get_default_recurring_events
 
 
@@ -55,12 +64,12 @@ def render_input_panel():
                 help="체크 시 은퇴 전까지 소득도 물가상승률만큼 동반 상승한다고 가정합니다.",
             )
             monthly_expense = st.number_input(
-                "월 필수 지출 (대출 이자 포함/만원)",
+                "월 기본지출 (만원)",
                 0,
                 value=600,
                 step=10,
                 key="in_expense",
-                help="가족 생활비 및 대출 이자가 포함된 기본 지출액입니다.",
+                help="기본 생활비, 가족 생활비, 대출 이자 등이 포함된 월 기본지출입니다. 내부에서 필수지출과 조정가능지출로 자동 분해합니다.",
             )
 
             st.markdown("---")
@@ -118,8 +127,8 @@ def render_input_panel():
                 f"은퇴 후 **{expected_return_post:.1f}% / 변동성 {vol_post:.1f}%**"
             )
             st.caption(
-                "※ 은퇴 전후 전환은 기존 글라이드패스 로직을 그대로 사용합니다. "
-                "이번 패치에서는 수익률·변동성 가정값만 현실화합니다."
+                "※ 은퇴 전후 전환은 은퇴 5년 전 강제 전환이 아니라, "
+                "국내퀀트 → 연금저축+ISA 계좌이동 계획을 반영해 완만하게 적용합니다."
             )
 
     st.markdown("---")
@@ -135,17 +144,34 @@ def render_input_panel():
                 key="in_dwz",
                 help="체크 시 일반 안정 기준 10%보다 높은 15% 파산확률 방어선을 사용해 추가 소비 여력을 계산합니다.",
             )
+            selected_spending_profile = st.selectbox(
+                "지출 구조 자동분해",
+                list(SPENDING_PROFILE_OPTIONS.keys()),
+                index=DEFAULT_SPENDING_PROFILE_INDEX,
+                key="in_spending_profile",
+                help="월 기본지출을 필수지출과 조정가능지출로 내부 분해합니다. DWZ와 긴축은 조정가능지출에만 적용합니다.",
+            )
+            essential_spending_ratio = SPENDING_PROFILE_OPTIONS[selected_spending_profile]
+
             use_flex_spending = st.checkbox(
-                "🧠 다단계 생존 본능 (시장 5% 하락 시 긴축)",
+                "🧠 시장 하락 시 조정가능지출 긴축",
                 value=True,
                 key="in_flex",
-                help="시장이 하락할 때 추가 YOLO 지출을 단계적으로 줄입니다. 기본생활비 자체는 이번 패치에서 변경하지 않습니다.",
+                help="시장 하락률이 커질수록 조정가능지출만 단계적으로 줄입니다. 필수지출과 이벤트성 지출은 자동 삭감하지 않습니다.",
             )
-            use_glide_path = st.checkbox(
-                "🛬 동적 글라이드 패스 (은퇴 5년 전부터 연착륙)",
+            use_portfolio_transition = st.checkbox(
+                "🛬 계좌이동 기반 포트폴리오 전환",
                 value=True,
-                key="in_glide",
-                help="은퇴 시점에 임박하여 수익률과 변동성을 5년에 걸쳐 낮춥니다.",
+                key="in_portfolio_transition",
+                help=(
+                    f"은퇴 전까지 국내퀀트에서 연금저축+ISA로 매년 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원을 이체하는 계획을 "
+                    "수익률·변동성 경로에 반영합니다."
+                ),
+            )
+            st.caption(
+                f"기준 계좌: 국내퀀트 {INITIAL_QUANT_ASSET_MANWON/10000:.1f}억, "
+                f"연금저축+ISA {INITIAL_DUAL_MOMENTUM_ASSET_MANWON/10000:.1f}억, "
+                f"VOO {INITIAL_VOO_ASSET_MANWON/10000:.1f}억"
             )
 
         with c_adv2.container(border=True):
@@ -219,6 +245,7 @@ def render_input_panel():
         "monthly_income": monthly_income,
         "apply_income_inflation": apply_income_inflation,
         "monthly_expense": monthly_expense,
+        "essential_spending_ratio": essential_spending_ratio,
         "current_asset": current_asset,
         "expected_return_pre": expected_return_pre,
         "vol_pre": vol_pre,
@@ -230,7 +257,7 @@ def render_input_panel():
         "use_inflation_shock": use_inflation_shock,
         "use_flex_spending": use_flex_spending,
         "dwz_mode": dwz_mode,
-        "use_glide_path": use_glide_path,
+        "use_portfolio_transition": use_portfolio_transition,
         "lump_events": clean_lump_df,
         "recurring_events": clean_recur_df,
     }

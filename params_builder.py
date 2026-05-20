@@ -7,6 +7,7 @@ def build_simulation_params(input_values):
         "monthly_income": input_values["monthly_income"],
         "apply_income_inflation": input_values["apply_income_inflation"],
         "monthly_expense": input_values["monthly_expense"],
+        "essential_spending_ratio": input_values["essential_spending_ratio"],
 
         "expected_return_pre": input_values["expected_return_pre"],
         "vol_pre": input_values["vol_pre"],
@@ -24,5 +25,5 @@ def build_simulation_params(input_values):
         "use_inflation_shock": input_values["use_inflation_shock"],
         "use_flex_spending": input_values["use_flex_spending"],
         "dwz_mode": input_values["dwz_mode"],
-        "use_glide_path": input_values["use_glide_path"],
+        "use_portfolio_transition": input_values["use_portfolio_transition"],
     }
