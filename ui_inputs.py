@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 
 from config import SCENARIO_OPTIONS, DEFAULT_SCENARIO_INDEX
 from data_defaults import get_default_lump_events, get_default_recurring_events
@@ -25,7 +24,7 @@ def render_input_panel():
                 90,
                 60,
                 key="in_ret_age",
-                help="본 시스템의 1차 목표 지점입니다. 60세 시점의 자산 방어율을 중점적으로 추적합니다.",
+                help="본 시스템의 1차 목표 지점입니다. 은퇴 시점의 자산 방어율을 중점적으로 추적합니다.",
             )
             death_age = st.number_input(
                 "목표 수명",
@@ -33,7 +32,7 @@ def render_input_panel():
                 120,
                 90,
                 key="in_death",
-                help="이 나이까지 자산이 고갈되지 않아야 파산 확률 0%로 판정합니다.",
+                help="이 나이까지 금융자산이 고갈되지 않는지 확인합니다.",
             )
 
     with c2:
@@ -53,7 +52,7 @@ def render_input_panel():
                 "수입 물가연동",
                 value=False,
                 key="in_inc_inf",
-                help="체크 시, 은퇴 전까지 소득도 물가상승률만큼 동반 상승한다고 가정합니다.",
+                help="체크 시 은퇴 전까지 소득도 물가상승률만큼 동반 상승한다고 가정합니다.",
             )
             monthly_expense = st.number_input(
                 "월 필수 지출 (대출 이자 포함/만원)",
@@ -61,7 +60,7 @@ def render_input_panel():
                 value=600,
                 step=10,
                 key="in_expense",
-                help="가족 생활비 및 대출 이자가 모두 포함된 총 지출액입니다.",
+                help="가족 생활비 및 대출 이자가 포함된 기본 지출액입니다.",
             )
 
             st.markdown("---")
@@ -74,7 +73,7 @@ def render_input_panel():
                 2.5,
                 step=0.1,
                 key="in_inf",
-                help="물가 상승으로 인한 구매력 하락을 자산 궤적에 역산하여 반영합니다.",
+                help="물가 상승으로 인한 구매력 하락을 현재가치 기준으로 역산합니다.",
             )
             tax_fee_rate = col_ret4.number_input(
                 "거래세/수수료(연%)",
@@ -83,39 +82,44 @@ def render_input_panel():
                 0.5,
                 step=0.1,
                 key="in_tax",
-                help="매매 수수료 및 거래세 등을 매년 선제적으로 삭감합니다.",
+                help="시뮬레이터 내부에서 매년 수익률에서 차감하는 추가 비용입니다. 백테스트 비용과 중복되지 않도록 보수적으로 입력하십시오.",
             )
 
     with c3:
         with st.container(border=True):
-            st.subheader("📈 3. 자산 및 통합 수익률 시나리오")
+            st.subheader("📈 3. 자산 및 포트폴리오 시나리오")
             current_asset = st.number_input(
                 "현재 금융자산 (만원)",
                 0,
-                value=97000,
+                value=126000,
                 step=100,
                 key="in_asset",
-                help="대출이 포함된 총 운용 자산입니다. 기대수익률은 대출이자 및 제세금이 블렌딩된 수치로 간주합니다.",
+                help="국내 퀀트, 듀얼모멘텀, VOO 등 현재 운용 금융자산 합계입니다.",
             )
 
-            st.markdown("###### ⚔️ 포트폴리오 통합 시나리오 선택")
+            st.markdown("###### ⚔️ 현재 포트폴리오 기준 시나리오")
 
             selected_scenario = st.selectbox(
-                "성장-방어 통합 궤적 선택",
+                "수익률·변동성 가정 선택",
                 list(SCENARIO_OPTIONS.keys()),
                 index=DEFAULT_SCENARIO_INDEX,
-                help="은퇴 전 수익률 타겟을 선택하면 은퇴 후 안전자산 30% 편입 비율이 자동 연산되어 하드코딩됩니다.",
+                help=(
+                    "국내 퀀트 10.7억, 듀얼모멘텀 1.2억, VOO 0.7억의 현재 포트폴리오를 기준으로 "
+                    "백테스트 원자료를 할인해 만든 시뮬레이터용 가정입니다."
+                ),
             )
 
             expected_return_pre, vol_pre, expected_return_post, vol_post = SCENARIO_OPTIONS[
                 selected_scenario
             ]
 
-            st.markdown("###### 🛡️ 은퇴 후 (방어형 자동 스위칭)")
             st.info(
-                f"👉 해당 시나리오 적용 시, 은퇴 후 기대수익률은 **{expected_return_post}%**, "
-                f"변동성은 **{vol_post}%**로 자동 하강(Glide-Path) 적용됩니다. "
-                f"(안전자산 30% 블렌딩)"
+                f"선택값: 은퇴 전 **{expected_return_pre:.1f}% / 변동성 {vol_pre:.1f}%**, "
+                f"은퇴 후 **{expected_return_post:.1f}% / 변동성 {vol_post:.1f}%**"
+            )
+            st.caption(
+                "※ 은퇴 전후 전환은 기존 글라이드패스 로직을 그대로 사용합니다. "
+                "이번 패치에서는 수익률·변동성 가정값만 현실화합니다."
             )
 
     st.markdown("---")
@@ -126,22 +130,22 @@ def render_input_panel():
         with c_adv1.container(border=True):
             st.markdown("##### 🏖️ 라이프스타일 최적화")
             dwz_mode = st.checkbox(
-                "🔥 Die with Zero 최적화 (파산 확률 20% 타겟)",
+                "🔥 Die with Zero 최적화 (파산 확률 15% 방어선)",
                 value=True,
                 key="in_dwz",
-                help="체크 시 기본 15%에서 20%로 타겟 확률을 상향 조정하며 효용을 극대화합니다.",
+                help="체크 시 일반 안정 기준 10%보다 높은 15% 파산확률 방어선을 사용해 추가 소비 여력을 계산합니다.",
             )
             use_flex_spending = st.checkbox(
                 "🧠 다단계 생존 본능 (시장 5% 하락 시 긴축)",
                 value=True,
                 key="in_flex",
-                help="시장이 하락할 때 지출을 통제하는 동적 인출 로직을 작동시킵니다.",
+                help="시장이 하락할 때 추가 YOLO 지출을 단계적으로 줄입니다. 기본생활비 자체는 이번 패치에서 변경하지 않습니다.",
             )
             use_glide_path = st.checkbox(
                 "🛬 동적 글라이드 패스 (은퇴 5년 전부터 연착륙)",
                 value=True,
                 key="in_glide",
-                help="은퇴 시점에 임박하여 수익률과 변동성을 5년에 걸쳐 계단식으로 부드럽게 낮춥니다.",
+                help="은퇴 시점에 임박하여 수익률과 변동성을 5년에 걸쳐 낮춥니다.",
             )
 
         with c_adv2.container(border=True):
@@ -150,13 +154,13 @@ def render_input_panel():
                 "📉 팻 테일(Fat Tail) 대폭락장 적용",
                 value=True,
                 key="in_fat",
-                help="정규 분포를 벗어나는 극단적인 금융위기급 폭락 확률을 시뮬레이션에 포함합니다.",
+                help="정규분포보다 극단적 수익률이 더 자주 나오는 분포를 사용합니다.",
             )
             use_inflation_shock = st.checkbox(
                 "🔥 스태그플레이션 (수익률 영구 타격)",
                 value=True,
                 key="in_shock",
-                help="3년간 고물가 및 수익률 하락이 동시에 오는 블랙스완 시나리오를 적용합니다.",
+                help="은퇴 초반부에 3년간 고물가와 수익률 하락이 동시에 발생하는 스트레스 상황을 반영합니다.",
             )
 
     st.markdown("---")
@@ -196,11 +200,11 @@ def render_input_panel():
                 ),
                 "확정연금": st.column_config.CheckboxColumn(
                     "확정연금",
-                    help="주가에 상관없이 평생 지급되는 안정적 수입",
+                    help="주가에 상관없이 지급되는 안정적 수입",
                 ),
                 "물가연동": st.column_config.CheckboxColumn(
                     "물가연동",
-                    help="체크 시 매년 물가상승률만큼 수입/지출액 증가. (명목 고정액은 체크 해제)",
+                    help="체크 시 매년 물가상승률만큼 수입/지출액 증가. 명목 고정액은 체크 해제합니다.",
                 ),
             },
         )

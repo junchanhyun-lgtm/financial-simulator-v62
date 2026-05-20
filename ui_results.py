@@ -3,106 +3,125 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
+from config import WARNING_RUIN_PROB
 from risk_metrics import build_real_life_risk_table
-from utils import calc_rolling_stats
 
 
-def render_rolling_window_section(sim_returns):
-    with st.expander("⏳ [멘탈 방어] 구간별 승률(Rolling Window)", expanded=False):
-        st.markdown("###### 📊 우주를 분석한 '보유 기간별' 시스템 승률 (평균회귀 10% 작용)")
+def _fmt_eok(value_won):
+    return f"{value_won / 100_000_000:.2f}억 원"
 
-        c_r1, c_r2, c_r3, c_r4 = st.columns(4)
-        r_windows = [1, 3, 5, 10]
-        r_cols = [c_r1, c_r2, c_r3, c_r4]
 
-        for r_w, r_c in zip(r_windows, r_cols):
-            w_rate, m_cagr = calc_rolling_stats(sim_returns, r_w)
-            r_c.metric(
-                f"{r_w}년 유지 시 승률",
-                f"{w_rate:.1f}%",
-                f"해당 구간 연평균: {m_cagr:.2f}%",
-                delta_color="off",
-            )
+def _safe_age_index(years, age):
+    if age in years:
+        return years.index(age)
+    years_arr = np.asarray(years)
+    return int(np.argmin(np.abs(years_arr - age)))
 
-        st.caption(
-            "※ 평균 회귀(Mean Reversion) 로직이 탑재되어, 기간이 길어질수록 수익률이 기댓값에 수렴합니다. "
-            "(강도: 10%)"
-        )
-def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire):
+
+def _ruin_status(base_ruin, target_ruin):
+    if base_ruin <= target_ruin:
+        return "기준 통과", "normal"
+    if base_ruin >= WARNING_RUIN_PROB:
+        return "위험", "inverse"
+    return "기준 초과", "off"
+
+
+def render_simulation_summary_section(safe_extra, base_ruin, target_ruin):
+    """
+    이전 app.py 호환을 위한 요약 함수입니다.
+    현재 app.py에서는 render_results_page() 내부의 요약 카드가 기본 표시됩니다.
+    """
+    status, delta_color = _ruin_status(base_ruin, target_ruin)
+
+    st.info(
+        "💡 모든 결괏값은 인플레이션을 역산한 현재 체감 구매력(Present Value) 기준입니다."
+    )
+
+    c1, c2 = st.columns(2)
+    c1.metric(
+        "기본 파산확률",
+        f"{base_ruin:.1f}%",
+        f"목표 {target_ruin:.0f}% · {status}",
+        delta_color=delta_color,
+    )
+    c2.metric(
+        "월 추가 사용 가능액",
+        f"{safe_extra:,}만 원" if safe_extra > 0 else "0만 원",
+        "목표 파산확률 방어선 기준",
+        delta_color="off",
+    )
+
+
+def render_top_summary_section(res):
+    years = res["years"]
+    sim_assets_pv = res["pv"]
+    base_ruin = res["base_ruin"]
+    target_ruin = res["t_ruin"]
+    safe_extra = res["safe_extra"]
+    tgt_retire = res["retire_age"]
+
+    retire_idx = _safe_age_index(years, tgt_retire)
     final_assets = sim_assets_pv[:, -1]
+    retire_assets = sim_assets_pv[:, retire_idx]
 
-    top10_idx = np.abs(final_assets - np.percentile(final_assets, 90)).argmin()
-    median_idx = np.abs(final_assets - np.percentile(final_assets, 50)).argmin()
-    bot10_idx = np.abs(final_assets - np.percentile(final_assets, 10)).argmin()
+    median_retire_asset = np.median(retire_assets)
+    p10_retire_asset = np.percentile(retire_assets, 10)
+    median_final_asset = np.median(final_assets)
 
-    paths = {
-        "상위 10% (운수 좋은 날)": {
-            "ret": sim_returns[top10_idx, :],
-            "pv": sim_assets_pv[top10_idx, :],
-        },
-        "중간값 (가장 현실적)": {
-            "ret": sim_returns[median_idx, :],
-            "pv": sim_assets_pv[median_idx, :],
-        },
-        "하위 10% (스트레스)": {
-            "ret": sim_returns[bot10_idx, :],
-            "pv": sim_assets_pv[bot10_idx, :],
-        },
-    }
+    status, delta_color = _ruin_status(base_ruin, target_ruin)
 
-    with st.expander(
-        f"📊 [심층 분석] {tgt_retire}세(은퇴) 도달 시점 시나리오별 자산 궤적 3종 비교",
-        expanded=False,
-    ):
-        st.markdown(f"**총 {sim_assets_pv.shape[0]:,}번의 평행우주 중, 자산 성과 기준 대표 궤적입니다.**")
+    st.info(
+        "💡 모든 결괏값은 인플레이션을 역산한 현재 체감 구매력(Present Value) 기준입니다."
+    )
 
-        c_m1, c_m2, c_m3 = st.columns(3)
-        cols = [c_m1, c_m2, c_m3]
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(
+        "기본 파산확률",
+        f"{base_ruin:.1f}%",
+        f"목표 {target_ruin:.0f}% · {status}",
+        delta_color=delta_color,
+    )
+    m2.metric(
+        "월 추가 사용 가능액",
+        f"{safe_extra:,}만 원" if safe_extra > 0 else "0만 원",
+        "목표 방어선 기준",
+        delta_color="off",
+    )
+    m3.metric(
+        f"{tgt_retire}세 중앙값 자산",
+        _fmt_eok(median_retire_asset),
+        f"하위 10%: {_fmt_eok(p10_retire_asset)}",
+        delta_color="off",
+    )
+    m4.metric(
+        f"{years[-1]}세 중앙값 자산",
+        _fmt_eok(median_final_asset),
+        "현재가치 기준",
+        delta_color="off",
+    )
 
-        comp_data = {"나이": years}
-        target_age_idx = years.index(tgt_retire) if tgt_retire in years else -1
+    if base_ruin >= WARNING_RUIN_PROB:
+        st.error(
+            f"⚠️ 파산확률이 {WARNING_RUIN_PROB:.0f}% 이상입니다. "
+            "현재 지출, 은퇴 시점, 수익률 가정 중 하나 이상을 재검토해야 합니다."
+        )
+    elif base_ruin > target_ruin:
+        st.warning(
+            f"⚠️ 현재 파산확률이 목표 방어선 {target_ruin:.0f}%를 초과합니다. "
+            "추가 소비 여력은 없는 것으로 해석하는 것이 안전합니다."
+        )
+    else:
+        st.success(
+            f"✅ 현재 입력값에서는 목표 파산확률 {target_ruin:.0f}% 방어선을 통과했습니다."
+        )
 
-        for i, (label, data) in enumerate(paths.items()):
-            ret_array = data["ret"]
-            pv_array = data["pv"]
 
-            cagr = (np.prod(1 + ret_array) ** (1 / len(years)) - 1) * 100
-            tgt_pv_eok = pv_array[target_age_idx] / 100000000 if target_age_idx != -1 else 0
-
-            cols[i].metric(
-                label,
-                f"{tgt_retire}세 자산 {tgt_pv_eok:.1f}억 원",
-                f"연평균(CAGR): {cagr:.2f}%",
-                delta_color="off",
-            )
-
-            short_label = label.split(" ")[0] + " " + label.split(" ")[1]
-            comp_data[f"[{short_label}] 수익률(%)"] = np.round(ret_array * 100, 2)
-            comp_data[f"[{short_label}] 자산(억)"] = np.round(pv_array / 100000000, 2)
-
-        st.markdown("---")
-
-        comp_df = pd.DataFrame(comp_data).set_index("나이")
-
-        c_chart1, c_chart2 = st.columns(2)
-
-        with c_chart1:
-            st.markdown("###### 📈 연도별 적용 수익률 추이 비교")
-            st.line_chart(
-                comp_df[[c for c in comp_df.columns if "수익률" in c]],
-                height=300,
-            )
-
-        with c_chart2:
-            st.markdown("###### 💰 연도별 자산 잔고 추이 비교 (현재가치)")
-            st.line_chart(
-                comp_df[[c for c in comp_df.columns if "자산" in c]],
-                height=300,
-            )        
 def render_stress_budget_section(stress_df, target_ruin, is_dwz):
+    st.markdown("##### 💸 월 추가지출 방어선")
+
     colors = [
         "#27AE60" if val <= target_ruin + 0.01
-        else "#F1C40F" if val < target_ruin + 10
+        else "#F1C40F" if val < WARNING_RUIN_PROB
         else "#E74C3C"
         for val in stress_df["파산 확률(%)"]
     ]
@@ -120,14 +139,14 @@ def render_stress_budget_section(stress_df, target_ruin, is_dwz):
     )
 
     title_suffix = (
-        f"(81세 컷오프 & {target_ruin:.0f}% 방어)"
+        f"DWZ {target_ruin:.0f}% 방어선"
         if is_dwz
-        else f"({target_ruin:.0f}% 방어)"
+        else f"기본 {target_ruin:.0f}% 방어선"
     )
 
     fig_stress.update_layout(
-        title=f"<b>월 여유 생활비별 파산 확률 {title_suffix}</b>",
-        yaxis_title="파산 확률 (%)",
+        title=f"<b>추가지출별 파산확률 ({title_suffix})</b>",
+        yaxis_title="파산확률 (%)",
         height=300,
         plot_bgcolor="rgba(252, 252, 252, 1)",
         margin=dict(l=20, r=20, t=40, b=20),
@@ -137,32 +156,35 @@ def render_stress_budget_section(stress_df, target_ruin, is_dwz):
         y=target_ruin,
         line_dash="dot",
         line_color="green",
-        annotation_text=f"안전 방어선 ({target_ruin:.0f}%)",
+        annotation_text=f"목표 방어선 {target_ruin:.0f}%",
+    )
+    fig_stress.add_hline(
+        y=WARNING_RUIN_PROB,
+        line_dash="dot",
+        line_color="red",
+        annotation_text=f"경고선 {WARNING_RUIN_PROB:.0f}%",
     )
 
     with st.container(border=True):
-        st.plotly_chart(fig_stress, use_container_width=True)            
+        st.plotly_chart(fig_stress, use_container_width=True)
+        st.caption(
+            "※ 추가지출 가능액은 자산경로가 아니라 목표 파산확률 방어선을 기준으로 역산한 값입니다."
+        )
+
+
 def render_main_asset_path_section(
     years,
     sim_assets_pv,
-    base_ruin,
     target_ruin,
     tgt_retire,
     is_dwz,
     res_lump_df,
 ):
-    st.markdown(f"##### 📈 메인 자산 궤적 ({tgt_retire}세 1차 방어선 집중)")
+    st.markdown(f"##### 📈 자산 궤적 ({tgt_retire}세 은퇴 기준)")
 
     median_pv = np.median(sim_assets_pv, axis=0) / 100000000
     top_10_pv = np.percentile(sim_assets_pv, 90, axis=0) / 100000000
     bottom_10_pv = np.percentile(sim_assets_pv, 10, axis=0) / 100000000
-
-    idx_target = years.index(tgt_retire) if tgt_retire in years else -1
-
-    k1, k2, k3 = st.columns(3)
-    k1.metric("90세 최종 파산 확률", f"{base_ruin:.1f}%")
-    k2.metric(f"{tgt_retire}세 예상 자산 (중앙값)", f"{median_pv[idx_target]:.2f}억 원")
-    k3.metric(f"최악의 경우 (하위 10%)", f"{bottom_10_pv[idx_target]:.2f}억 원")
 
     fig = go.Figure()
 
@@ -210,7 +232,7 @@ def render_main_asset_path_section(
             x=tgt_retire,
             line_dash="dash",
             line_color="#95a5a6",
-            annotation_text="은퇴 & 수비형 전환",
+            annotation_text="은퇴",
         )
 
     if is_dwz and 81 in years:
@@ -218,7 +240,7 @@ def render_main_asset_path_section(
             x=81,
             line_dash="dot",
             line_color="#9b59b6",
-            annotation_text="사치 종료",
+            annotation_text="YOLO 종료",
         )
 
     for _, row in res_lump_df.iterrows():
@@ -232,117 +254,155 @@ def render_main_asset_path_section(
 
     fig.update_layout(
         xaxis_title="나이",
-        yaxis_title="현재 체감 자산 (억 원)",
-        height=450,
+        yaxis_title="현재가치 자산 (억 원)",
+        height=480,
         plot_bgcolor="rgba(252, 252, 252, 1)",
         hovermode="x unified",
         margin=dict(t=20, l=10, r=10),
     )
 
     with st.container(border=True):
-        st.plotly_chart(fig, use_container_width=True)  
-def render_sensitivity_section(sens_df):
-    st.markdown("##### 🌪️ 변수 민감도 분석 (파산 트리거)")
-
-    sens_df_sorted = sens_df.sort_values(
-        by="충격(%)",
-        key=abs,
-        ascending=True,
-    )
-
-    t_colors = [
-        "#E74C3C" if val > 0 else "#27AE60"
-        for val in sens_df_sorted["충격(%)"]
-    ]
-
-    fig_torn = go.Figure(
-        go.Bar(
-            x=sens_df_sorted["충격(%)"],
-            y=sens_df_sorted["시나리오"],
-            orientation="h",
-            marker_color=t_colors,
-            text=[
-                f"+{v:.1f}%p" if v > 0 else f"{v:.1f}%p"
-                for v in sens_df_sorted["충격(%)"]
-            ],
-            textposition="auto",
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            f"녹색 기준선은 목표 파산확률 {target_ruin:.0f}% 방어선이며, "
+            "그래프의 하위 10% 경로는 나쁜 장기 경로의 자산 방어력을 확인하기 위한 기준입니다."
         )
-    )
 
-    fig_torn.update_layout(
-        title="<b>해당 사건 발생 시 '파산 확률' 증감 폭</b>",
-        xaxis_title="파산 확률 변동 폭 (%p)",
-        height=250,
-        plot_bgcolor="rgba(252, 252, 252, 1)",
-        margin=dict(l=20, r=20, t=40, b=20),
-    )
 
-    fig_torn.add_vline(
-        x=0,
-        line_width=2,
-        line_color="#333333",
-    )
-
-    with st.container(border=True):
-        st.plotly_chart(fig_torn, use_container_width=True)       
-def render_engine_notes_section(defense_rate):
-    with st.container(border=True):
-        st.subheader("💡 퀀트 코어 엔진: V59 튜닝 로직")
-        st.info(f"""
-        **1. 자산 평가 및 연금 방어율 (PV Discounting)**
-        모든 시뮬레이션 결과값은 인플레이션을 역산한 **'현재 체감 구매력'**입니다. 현재 월 필수 지출 대비 확정 연금(국민/주택)의 방어율은 **{defense_rate:.1f}%**입니다.
-
-        **2. 자동 글라이드 패스 & 7:3 블렌딩**
-        사용자가 선택한 통합 시나리오에 따라, 은퇴 시점에 도달하면 계좌 내 **안전자산(채권 등)의 비중이 30%로 자동 증가**하며 기대수익률과 변동성이 시스템 룰에 맞춰 동시에 하강합니다.
-
-        **3. 기계적 매매 마찰 비용 (Slippage Decay)**
-        수익률 모델링과 별개로, 자산 규모가 10억 원을 초과할 때마다 연 4회 리밸런싱에서 발생하는 호가 스프레드 비용을 수식(`0.015 * log10(자산/10억)`)에 따라 매년 자산에서 확정 삭감합니다.
-
-        **4. 상하방 평균 회귀 (Mean Reversion - 10%)**
-        자본 시장의 중력을 모사한 자기회귀(AR-1) 모델이 적용되었습니다. 전년도 시장이 폭등/폭락하면, 다음 해의 기대수익률은 기계적으로 역방향(10%)으로 끌어당겨집니다.
-
-        **5. 다단계 생존 본능 (Dynamic Withdrawal)**
-        계좌 잔고가 아닌 순수 시장 주가지수가 전고점 대비 5% 하락할 때마다 사치(YOLO) 지출을 20%씩 강제 삭감합니다.
-        """)         
-def render_simulation_summary_section(safe_extra, base_ruin, target_ruin):
-    st.info("💡 **[가치 평가 기준]** 본 시뮬레이터의 모든 결괏값은 인플레이션을 역산한 **'현재 체감 구매력(Present Value)'** 기준으로 완벽히 변환되어 표시됩니다.")
-
-    if safe_extra > 0:
-        st.markdown(f"""
-        <div class='yolo-box'>
-            <p class='yolo-title'>💰 파산 확률 {target_ruin:.0f}% 방어선 통과</p>
-            <p class='yolo-value'>이번 달 추가로 써도 되는 욜로(YOLO) 예산 = 월 {safe_extra:,}만 원</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.error(f"⚠️ **안전 마진 없음:** 기본 파산 확률이 {base_ruin:.1f}%로 타겟({target_ruin:.0f}%)을 초과합니다. 지출 통제가 시급합니다.")        
 def render_real_life_risk_section(res):
     risk_df = build_real_life_risk_table(res)
 
-    with st.expander("🧭 현실 리스크 지표: 파산 전 단계의 위험", expanded=True):
+    with st.container(border=True):
+        st.markdown("##### 🧭 현실 리스크 지표")
         st.caption(
-            "※ 이 섹션은 기존 몬테카를로 결과에서 파생 계산한 해석 지표입니다. "
-            "수익률 생성, 파산확률, 자산경로 계산식은 변경하지 않습니다."
+            "파산 전 단계에서 실제로 체감할 수 있는 낙폭, 시퀀스 리스크, 자산 훼손 위험입니다. "
+            "기존 몬테카를로 결과에서 파생 계산하며 자산경로 계산식은 바꾸지 않습니다."
         )
         st.dataframe(risk_df, use_container_width=True, hide_index=True)
+
+
+def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire):
+    final_assets = sim_assets_pv[:, -1]
+
+    top10_idx = np.abs(final_assets - np.percentile(final_assets, 90)).argmin()
+    median_idx = np.abs(final_assets - np.percentile(final_assets, 50)).argmin()
+    bot10_idx = np.abs(final_assets - np.percentile(final_assets, 10)).argmin()
+
+    paths = {
+        "상위 10%": {
+            "ret": sim_returns[top10_idx, :],
+            "pv": sim_assets_pv[top10_idx, :],
+        },
+        "중앙값": {
+            "ret": sim_returns[median_idx, :],
+            "pv": sim_assets_pv[median_idx, :],
+        },
+        "하위 10%": {
+            "ret": sim_returns[bot10_idx, :],
+            "pv": sim_assets_pv[bot10_idx, :],
+        },
+    }
+
+    with st.expander("📊 고급 분석: 대표 경로 3종 비교", expanded=False):
+        st.caption("민감도 분석과 구간별 승률은 기본 결과 화면에서 제거했습니다.")
+
+        c_m1, c_m2, c_m3 = st.columns(3)
+        cols = [c_m1, c_m2, c_m3]
+
+        comp_data = {"나이": years}
+        target_age_idx = _safe_age_index(years, tgt_retire)
+
+        for i, (label, data) in enumerate(paths.items()):
+            ret_array = data["ret"]
+            pv_array = data["pv"]
+
+            cagr = (np.prod(1 + ret_array) ** (1 / len(years)) - 1) * 100
+            tgt_pv_eok = pv_array[target_age_idx] / 100000000
+
+            cols[i].metric(
+                label,
+                f"{tgt_retire}세 {tgt_pv_eok:.1f}억 원",
+                f"CAGR {cagr:.2f}%",
+                delta_color="off",
+            )
+
+            comp_data[f"[{label}] 수익률(%)"] = np.round(ret_array * 100, 2)
+            comp_data[f"[{label}] 자산(억)"] = np.round(pv_array / 100000000, 2)
+
+        comp_df = pd.DataFrame(comp_data).set_index("나이")
+
+        c_chart1, c_chart2 = st.columns(2)
+        with c_chart1:
+            st.markdown("###### 연도별 적용 수익률")
+            st.line_chart(
+                comp_df[[c for c in comp_df.columns if "수익률" in c]],
+                height=300,
+            )
+
+        with c_chart2:
+            st.markdown("###### 연도별 자산 잔고")
+            st.line_chart(
+                comp_df[[c for c in comp_df.columns if "자산" in c]],
+                height=300,
+            )
+
+
+def render_engine_notes_section(defense_rate):
+    with st.container(border=True):
+        st.subheader("💡 현재 모델 해석")
+        st.info(
+            f"""
+            **1. 현재가치 기준**  
+            모든 결과는 인플레이션을 역산한 현재 체감 구매력 기준입니다. 현재 월 기본지출 대비 확정연금 방어율은 **{defense_rate:.1f}%**입니다.
+
+            **2. 포트폴리오 수익률 가정**  
+            수익률 시나리오는 국내 퀀트 10.7억, 듀얼모멘텀 1.2억, VOO 0.7억의 현재 포트폴리오를 기준으로 보수·기본·공격 3단계로 재정리했습니다.
+
+            **3. 파산확률 기준**  
+            일반 기준은 10%, DWZ 기준은 15%입니다. 20% 이상은 경고 구간으로 봅니다.
+
+            **4. 이번 패치에서 유지한 기존 로직**  
+            팻테일, 인플레이션 쇼크, DWZ 지출 감소, 글라이드패스, 평균회귀, 자산규모 슬리피지 페널티는 계산식 자체를 변경하지 않았습니다.
+            """
+        )
+
 
 def render_results_page(res):
     years = res["years"]
     sim_assets_pv = res["pv"]
     sim_returns = res["returns"]
-    
-    base_ruin = res["base_ruin"]
     stress_df = res["stress_df"]
-    sens_df = res["sens_df"]
 
     is_dwz = res["dwz_mode"]
     target_ruin = res["t_ruin"]
     res_lump_df = res["lump_df"]
     tgt_retire = res["retire_age"]
-   
-    render_real_life_risk_section(res)
 
-    render_rolling_window_section(sim_returns)
+    render_top_summary_section(res)
+    st.markdown("---")
+
+    left_col, right_col = st.columns([2.4, 1.1])
+
+    with left_col:
+        render_main_asset_path_section(
+            years,
+            sim_assets_pv,
+            target_ruin,
+            tgt_retire,
+            is_dwz,
+            res_lump_df,
+        )
+        render_stress_budget_section(
+            stress_df,
+            target_ruin,
+            is_dwz,
+        )
+
+    with right_col:
+        render_engine_notes_section(res["defense_rate"])
+
+    st.markdown("---")
+    render_real_life_risk_section(res)
 
     render_representative_paths_section(
         years,
@@ -350,29 +410,3 @@ def render_results_page(res):
         sim_returns,
         tgt_retire,
     )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    g_col, d_col = st.columns([2.5, 1.2])
-
-    with g_col:
-        render_stress_budget_section(
-            stress_df,
-            target_ruin,
-            is_dwz,
-        )
-
-        render_main_asset_path_section(
-            years,
-            sim_assets_pv,
-            base_ruin,
-            target_ruin,
-            tgt_retire,
-            is_dwz,
-            res_lump_df,
-        )
-
-        render_sensitivity_section(sens_df)
-
-    with d_col:
-        render_engine_notes_section(res["defense_rate"])              

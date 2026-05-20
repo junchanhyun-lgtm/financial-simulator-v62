@@ -5,7 +5,6 @@ def run_simulation_analysis(
     params,
     main_sims,
     search_sims,
-    sensitivity_sims,
 ):
     simulator = FinancialSimulator(params)
 
@@ -21,11 +20,6 @@ def run_simulation_analysis(
     ) = simulator.run_hybrid_analysis(
         main_sims=main_sims,
         search_sims=search_sims,
-    )
-
-    sens_df = simulator.run_sensitivity(
-        base_ruin,
-        sims=sensitivity_sims,
     )
 
     recurring_events = params["recurring_events"]
@@ -53,7 +47,6 @@ def run_simulation_analysis(
         "safe_extra": safe_extra,
         "base_ruin": base_ruin,
         "stress_df": stress_df,
-        "sens_df": sens_df,
         "t_ruin": t_ruin,
         "defense_rate": defense_rate,
     }

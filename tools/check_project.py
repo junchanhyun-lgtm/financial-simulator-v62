@@ -18,8 +18,14 @@ PYTHON_FILES = [
     "simulation_runner.py",
     "result_state.py",
     "ui_results.py",
-    "tools/check_simulator_equivalence.py",
+    "risk_metrics.py",
+    "tools/check_assumptions.py",
+    "tools/check_project.py",
 ]
+
+
+def existing_python_files():
+    return [file for file in PYTHON_FILES if (ROOT_DIR / file).exists()]
 
 
 def run_command(command):
@@ -31,8 +37,8 @@ def run_command(command):
 
 
 def main():
-    run_command([sys.executable, "-m", "py_compile", *PYTHON_FILES])
-    run_command([sys.executable, "tools/check_simulator_equivalence.py"])
+    run_command([sys.executable, "-m", "py_compile", *existing_python_files()])
+    run_command([sys.executable, "tools/check_assumptions.py"])
 
     print("\nOK: project checks passed.")
 

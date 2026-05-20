@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+
+from config import DWZ_TARGET_RUIN_PROB, STANDARD_TARGET_RUIN_PROB
 # -----------------------------------------------------------
 # 2. 퀀트 시뮬레이션 코어 엔진 (V59)
 # -----------------------------------------------------------
@@ -204,7 +206,7 @@ class FinancialSimulator:
 
     def run_hybrid_analysis(self, main_sims=5000, search_sims=1000):
         is_dwz = self.params.get('dwz_mode', False)
-        target_ruin_prob = 20.0 if is_dwz else 15.0
+        target_ruin_prob = DWZ_TARGET_RUIN_PROB if is_dwz else STANDARD_TARGET_RUIN_PROB
 
         current_age = self.params['current_age']
         retire_age = self.params['retire_age']
