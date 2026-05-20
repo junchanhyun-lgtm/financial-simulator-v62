@@ -1,3 +1,14 @@
+from config import (
+    AUTO_APPLY_DWZ_SPENDING,
+    AUTO_APPLY_FAT_TAIL,
+    AUTO_APPLY_FLEX_SPENDING,
+    AUTO_APPLY_INFLATION_SHOCK,
+    AUTO_APPLY_PORTFOLIO_TRANSITION,
+    ESSENTIAL_SPENDING_RATIO,
+    INCOME_INFLATION_LINKED,
+)
+
+
 def build_simulation_params(input_values):
     return {
         "current_age": input_values["current_age"],
@@ -5,9 +16,12 @@ def build_simulation_params(input_values):
         "current_asset": input_values["current_asset"],
 
         "monthly_income": input_values["monthly_income"],
-        "apply_income_inflation": input_values["apply_income_inflation"],
+        "apply_income_inflation": INCOME_INFLATION_LINKED,
         "monthly_expense": input_values["monthly_expense"],
-        "essential_spending_ratio": input_values["essential_spending_ratio"],
+        "essential_spending_ratio": input_values.get(
+            "essential_spending_ratio",
+            ESSENTIAL_SPENDING_RATIO,
+        ),
 
         "expected_return_pre": input_values["expected_return_pre"],
         "vol_pre": input_values["vol_pre"],
@@ -21,9 +35,10 @@ def build_simulation_params(input_values):
         "lump_events": input_values["lump_events"],
         "recurring_events": input_values["recurring_events"],
 
-        "use_fat_tail": input_values["use_fat_tail"],
-        "use_inflation_shock": input_values["use_inflation_shock"],
-        "use_flex_spending": input_values["use_flex_spending"],
-        "dwz_mode": input_values["dwz_mode"],
-        "use_portfolio_transition": input_values["use_portfolio_transition"],
+        # 현실화 모델은 UI 토글 없이 기본 적용합니다.
+        "use_fat_tail": AUTO_APPLY_FAT_TAIL,
+        "use_inflation_shock": AUTO_APPLY_INFLATION_SHOCK,
+        "use_flex_spending": AUTO_APPLY_FLEX_SPENDING,
+        "dwz_mode": AUTO_APPLY_DWZ_SPENDING,
+        "use_portfolio_transition": AUTO_APPLY_PORTFOLIO_TRANSITION,
     }

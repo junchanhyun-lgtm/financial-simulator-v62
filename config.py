@@ -1,21 +1,19 @@
-APP_VERSION = "V60-3"
+APP_VERSION = "V60-4"
 
-PAGE_TITLE = "My Quant Asset Sim (V60-3)"
+PAGE_TITLE = "My Quant Asset Sim (V60-4)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-3)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V60-4)"
 
 UPDATE_MESSAGE = (
-    "💡 V60-3 업데이트: 팻테일 강도, 인플레이션 쇼크, 평균회귀를 "
-    "현재 포트폴리오 기준에 맞게 현실화"
+    "💡 V60-4 업데이트: 입력 토글을 제거하고, 현실 리스크 3대 지표와 "
+    "현재가치 기준 결과 화면 중심으로 UI를 정리"
 )
 
 N_SIMULATIONS = 5000
 SEARCH_SIMULATIONS = 500
 
 # 수익률 분포 현실화 기본값
-# - 팻테일: 기존 df=5보다 완화한 df=10을 사용해 정규분포보다 두꺼운 꼬리는 유지하되 과도한 극단 손실은 줄입니다.
-# - 인플레이션 쇼크: 은퇴 후 강제 3년이 아니라 생애기간 중 확률적으로 발생하는 고물가·수익률 압박 이벤트로 처리합니다.
-# - 평균회귀: 기존 10%보다 약한 5%로 낮춰 폭락 후 자동 회복 가정을 완화합니다.
+# 모든 현실화 기능은 토글 없이 기본 적용합니다.
 FAT_TAIL_DF = 10
 INFLATION_SHOCK_ANNUAL_PROBABILITY = 0.025
 INFLATION_SHOCK_DURATION_YEARS = 3
@@ -24,10 +22,28 @@ INFLATION_SHOCK_RETURN_PENALTY = 0.04
 INFLATION_SHOCK_VOL_MULTIPLIER = 1.30
 MEAN_REVERSION_STRENGTH = 0.05
 
+# 자동 적용 플래그
+# UI에는 노출하지 않고, 시뮬레이터 내부에서 기본 적용합니다.
+AUTO_APPLY_DWZ_SPENDING = True
+AUTO_APPLY_FLEX_SPENDING = True
+AUTO_APPLY_PORTFOLIO_TRANSITION = True
+AUTO_APPLY_FAT_TAIL = True
+AUTO_APPLY_INFLATION_SHOCK = True
+
+# 소득·지출 물가 반영 원칙
+# - 수입은 명목 고정: 물가상승률만큼 자동 증가하지 않는 보수적 가정
+# - 지출은 현재가치 입력: 기본지출과 기간성 지출은 명목상 물가만큼 증가한다고 가정
+INCOME_INFLATION_LINKED = False
+EXPENSE_INFLATION_LINKED = True
+
+# 지출 구조 고정값
+# 기본 입력은 월 기본지출 1개만 유지하고, 내부에서 필수지출/조정가능지출로 분해합니다.
+ESSENTIAL_SPENDING_RATIO = 0.70
+FLEXIBLE_SPENDING_RATIO = 1.0 - ESSENTIAL_SPENDING_RATIO
+
 # 파산확률 판단 기준
-# - 일반 모드: 안정 은퇴 기준 10%
-# - DWZ 모드: 효용 확대를 허용하되 15%를 방어선으로 사용
-# - 20% 이상: 경고 구간
+# 추가지출 가능액은 DWZ 허용 기준 15%를 기준으로 계산합니다.
+# 결과 화면에는 안전 기준 10%, DWZ 기준 15%, 위험 경고선 20%를 함께 표시합니다.
 STANDARD_TARGET_RUIN_PROB = 10.0
 DWZ_TARGET_RUIN_PROB = 15.0
 WARNING_RUIN_PROB = 20.0
@@ -56,16 +72,6 @@ SCENARIO_OPTIONS = {
         13.5,
         17.0,
     ),
-}
-
-# 지출 구조 프리셋
-# 기본 입력은 월 기본지출 1개만 유지하고, 내부에서 필수지출/조정가능지출로 분해합니다.
-DEFAULT_SPENDING_PROFILE_INDEX = 1
-
-SPENDING_PROFILE_OPTIONS = {
-    "보수형: 필수 80% / 조정가능 20%": 0.80,
-    "기본형: 필수 70% / 조정가능 30%": 0.70,
-    "유연형: 필수 60% / 조정가능 40%": 0.60,
 }
 
 # 계좌이동 기반 포트폴리오 전환 기본값
