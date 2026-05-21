@@ -23,6 +23,7 @@ def build_sim_results_state(
     return_ceiling_mask=None,
     market_index=None,
     raw_returns=None,
+    return_assumption_info=None,
     sensitivity_df=None,
     scenario_comparison_df=None,
 ):
@@ -32,6 +33,7 @@ def build_sim_results_state(
         "nom": main_nom,
         "returns": main_returns,
         "raw_returns": raw_returns,
+        "return_assumption_info": return_assumption_info or {},
         "n_sims": n_sims,
         "safe_extra": safe_extra,
         "trimmed_avg_extra": trimmed_avg_extra,

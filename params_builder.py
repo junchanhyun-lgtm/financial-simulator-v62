@@ -27,6 +27,7 @@ def build_simulation_params(input_values):
         "vol_pre": input_values["vol_pre"],
         "expected_return_post": input_values["expected_return_post"],
         "vol_post": input_values["vol_post"],
+        "return_assumption_info": input_values.get("return_assumption_info", {}),
 
         "inflation": input_values["inflation"],
         "tax_fee_rate": input_values["tax_fee_rate"],

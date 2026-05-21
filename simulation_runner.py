@@ -48,4 +48,5 @@ def run_simulation_analysis(
         "defense_rate": defense_rate,
         "sensitivity_df": sensitivity_df,
         "scenario_comparison_df": scenario_comparison_df,
+        "return_assumption_info": params.get("return_assumption_info", {}),
     }

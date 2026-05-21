@@ -39,6 +39,7 @@ def main():
                 main_returns=analysis["main_returns"],
                 n_sims=N_SIMULATIONS,
                 raw_returns=analysis.get("raw_returns"),
+                return_assumption_info=analysis.get("return_assumption_info"),
                 safe_extra=analysis["safe_extra"],
                 trimmed_avg_extra=analysis["trimmed_avg_extra"],
                 base_ruin=analysis["base_ruin"],
