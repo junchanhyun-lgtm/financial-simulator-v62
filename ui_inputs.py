@@ -1,13 +1,22 @@
 import streamlit as st
 
 from config import (
+    ALPHA_MODEL_BASE_CAGR,
+    ALPHA_MODEL_BASE_MDD,
+    ALPHA_MODEL_BASE_VOLATILITY,
+    ALPHA_MODEL_CASH_RETURN,
+    ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL,
+    ALPHA_MODEL_DEFAULT_RETIREMENT_ALLOCATION_LABEL,
+    ALPHA_MODEL_DISCOUNT_OPTIONS,
+    ALPHA_MODEL_NAME,
+    ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY,
+    ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS,
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     AUTO_APPLY_DWZ_SPENDING,
     AUTO_APPLY_FAT_TAIL,
     AUTO_APPLY_FLEX_SPENDING,
     AUTO_APPLY_INFLATION_SHOCK,
     AUTO_APPLY_PORTFOLIO_TRANSITION,
-    DEFAULT_SCENARIO_INDEX,
     DWZ_TARGET_RUIN_PROB,
     ESSENTIAL_SPENDING_RATIO,
     EXPENSE_INFLATION_LINKED,
@@ -22,10 +31,9 @@ from config import (
     INITIAL_DUAL_MOMENTUM_ASSET_MANWON,
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
+    MAX_TOTAL_ANNUAL_RETURN,
     MEAN_REVERSION_STRENGTH,
     MIN_TOTAL_ANNUAL_RETURN,
-    MAX_TOTAL_ANNUAL_RETURN,
-    SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
     WARNING_RUIN_PROB,
 )
@@ -35,6 +43,21 @@ from data_defaults import get_default_lump_events, get_default_recurring_events
 def _drop_model_columns_for_editor(df):
     """입력 UI에서는 내부 모델용 물가연동 컬럼을 노출하지 않습니다."""
     return df.drop(columns=["물가연동"], errors="ignore")
+
+
+def _build_discount_scenario_table(stock_weight, cash_weight):
+    rows = []
+    for label, discount_rate in ALPHA_MODEL_DISCOUNT_OPTIONS.items():
+        adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - float(discount_rate))
+        post_return = (adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
+        rows.append({
+            "할인율": label,
+            "은퇴 전 수익률": adjusted_cagr * 100.0,
+            "은퇴 후 수익률": post_return * 100.0,
+            "은퇴 전 변동성": ALPHA_MODEL_BASE_VOLATILITY * 100.0,
+            "은퇴 후 변동성": ALPHA_MODEL_BASE_VOLATILITY * stock_weight * 100.0,
+        })
+    return rows
 
 
 def render_applied_model_preview():
@@ -61,7 +84,7 @@ def render_applied_model_preview():
                 },
                 {
                     "모델": "극단 손익 가능성",
-                    "적용값": f"팻테일 t분포 df={FAT_TAIL_DF}, 보정 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}%~+{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%",
+                    "적용값": f"팻테일 t분포 df={FAT_TAIL_DF}, 하방 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% / 상방 +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}% 보정",
                     "의미": "정규분포보다 두꺼운 꼬리를 반영하되, 총자산 포트폴리오에 비현실적인 초극단값은 양쪽에서 보정합니다.",
                 },
                 {
@@ -169,23 +192,89 @@ def render_input_panel():
                 help="국내퀀트, 듀얼모멘텀, VOO 등 현재 운용 금융자산 합계입니다.",
             )
 
-            selected_scenario = st.selectbox(
-                "수익률·변동성 가정",
-                list(SCENARIO_OPTIONS.keys()),
-                index=DEFAULT_SCENARIO_INDEX,
-                help=(
-                    "국내퀀트 10.7억, 듀얼모멘텀 1.2억, VOO 0.7억의 현재 포트폴리오를 기준으로 "
-                    "백테스트 원자료를 할인해 만든 시뮬레이터용 가정입니다."
-                ),
+            discount_labels = list(ALPHA_MODEL_DISCOUNT_OPTIONS.keys())
+            default_discount_index = discount_labels.index(ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL)
+            selected_discount_label = st.selectbox(
+                "수익률",
+                discount_labels,
+                index=default_discount_index,
+                help="후보1 전략의 백테스트 CAGR에 알파 감소 할인율을 적용합니다.",
             )
 
-            expected_return_pre, vol_pre, expected_return_post, vol_post = SCENARIO_OPTIONS[
-                selected_scenario
-            ]
+            allocation_labels = list(ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS.keys())
+            default_allocation_index = allocation_labels.index(
+                ALPHA_MODEL_DEFAULT_RETIREMENT_ALLOCATION_LABEL
+            )
+            selected_allocation_label = st.selectbox(
+                "은퇴 후 자산배분",
+                allocation_labels,
+                index=default_allocation_index,
+                help="은퇴 후에는 주식전략과 현금성 자산을 섞어 수익률과 변동성을 계산합니다.",
+            )
+
+            selected_discount = ALPHA_MODEL_DISCOUNT_OPTIONS[selected_discount_label]
+            allocation = ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS[selected_allocation_label]
+            stock_weight = float(allocation["stock_weight"])
+            cash_weight = float(allocation["cash_weight"])
+
+            adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - selected_discount)
+            expected_return_pre = adjusted_cagr * 100.0
+            expected_return_post = (
+                (adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
+            ) * 100.0
+            vol_pre = ALPHA_MODEL_BASE_VOLATILITY * 100.0
+            vol_post = ALPHA_MODEL_BASE_VOLATILITY * stock_weight * 100.0
+            reference_mdd_pre = ALPHA_MODEL_BASE_MDD * 100.0
+            reference_mdd_post = ALPHA_MODEL_BASE_MDD * stock_weight * 100.0
+
+            st.dataframe(
+                _build_discount_scenario_table(stock_weight, cash_weight),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "은퇴 전 수익률": st.column_config.NumberColumn(format="%.2f%%"),
+                    "은퇴 후 수익률": st.column_config.NumberColumn(format="%.2f%%"),
+                    "은퇴 전 변동성": st.column_config.NumberColumn(format="%.2f%%"),
+                    "은퇴 후 변동성": st.column_config.NumberColumn(format="%.2f%%"),
+                },
+            )
+
+            with st.expander("⚙️ 적용 기준", expanded=False):
+                st.caption(
+                    f"은퇴 전 변동성은 코스피200 8개월과 S&P500 4개월 패시브 계절 포트폴리오의 약 {ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY * 100:.1f}%를 기준으로, 전략 현실성을 감안해 {vol_pre:.1f}%로 설정했습니다."
+                )
+                st.caption(
+                    f"은퇴 후 수익률은 주식전략 {stock_weight * 100:.0f}%와 현금 {cash_weight * 100:.0f}%를 섞어 계산합니다. 현금수익률은 명목 {ALPHA_MODEL_CASH_RETURN * 100:.1f}%로 둡니다."
+                )
+                st.caption(
+                    f"은퇴 후 변동성은 현금 변동성을 0%로 보고 {vol_pre:.1f}% × {stock_weight:.1f} = {vol_post:.1f}%로 계산합니다."
+                )
+
+            return_assumption_info = {
+                "모델": ALPHA_MODEL_NAME,
+                "선택": selected_discount_label,
+                "은퇴 후 자산배분": selected_allocation_label,
+                "기준 CAGR": ALPHA_MODEL_BASE_CAGR * 100.0,
+                "적용 할인율": selected_discount * 100.0,
+                "은퇴 후 주식비중": stock_weight * 100.0,
+                "은퇴 후 현금비중": cash_weight * 100.0,
+                "현금수익률": ALPHA_MODEL_CASH_RETURN * 100.0,
+                "은퇴 전 기대수익률": expected_return_pre,
+                "은퇴 전 변동성": vol_pre,
+                "은퇴 후 기대수익률": expected_return_post,
+                "은퇴 후 변동성": vol_post,
+                "참고 MDD": reference_mdd_pre,
+                "은퇴 후 참고 MDD": reference_mdd_post,
+                "설명": "후보1 알파 감소 모델입니다. 은퇴 전은 할인율별 수익률과 18.5% 변동성을 쓰고, 은퇴 후는 선택한 주식 현금 배분으로 수익률과 변동성을 계산합니다.",
+            }
 
             st.info(
-                f"은퇴 전 **{expected_return_pre:.1f}% / 변동성 {vol_pre:.1f}%**  ·  "
-                f"은퇴 후 **{expected_return_post:.1f}% / 변동성 {vol_post:.1f}%**"
+                f"은퇴 전 **{expected_return_pre:.2f}% / 변동성 {vol_pre:.2f}%**  ·  "
+                f"은퇴 후 **{expected_return_post:.2f}% / 변동성 {vol_post:.2f}%**"
+            )
+            st.caption(
+                f"은퇴 후 자산배분: {selected_allocation_label} · "
+                f"참고 MDD: 은퇴 전 {reference_mdd_pre:.2f}% / 은퇴 후 {reference_mdd_post:.2f}%"
             )
             st.caption(
                 f"기준 계좌: 국내퀀트 {INITIAL_QUANT_ASSET_MANWON/10000:.1f}억, "
@@ -271,6 +360,7 @@ def render_input_panel():
         "vol_pre": vol_pre,
         "expected_return_post": expected_return_post,
         "vol_post": vol_post,
+        "return_assumption_info": return_assumption_info,
         "inflation": inflation,
         "tax_fee_rate": tax_fee_rate,
         "use_fat_tail": AUTO_APPLY_FAT_TAIL,

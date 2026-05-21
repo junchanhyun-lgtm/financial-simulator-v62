@@ -2,6 +2,12 @@ import numpy as np
 import pandas as pd
 
 from config import (
+    ALPHA_MODEL_BASE_CAGR,
+    ALPHA_MODEL_BASE_VOLATILITY,
+    ALPHA_MODEL_CASH_RETURN,
+    ALPHA_MODEL_DEFAULT_RETIREMENT_ALLOCATION_LABEL,
+    ALPHA_MODEL_DISCOUNT_OPTIONS,
+    ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS,
     ANNUAL_TRANSFER_TO_DUAL_MANWON,
     DWZ_TARGET_RUIN_PROB,
     FAT_TAIL_DF,
@@ -21,7 +27,6 @@ from config import (
     RANDOM_SEED,
     SCENARIO_COMPARISON_SEARCH_SIMULATIONS,
     SCENARIO_COMPARISON_SIMULATIONS,
-    SCENARIO_OPTIONS,
     SENSITIVITY_SIMULATIONS,
     STANDARD_TARGET_RUIN_PROB,
     TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
@@ -593,14 +598,54 @@ class FinancialSimulator:
         search_sims=SCENARIO_COMPARISON_SEARCH_SIMULATIONS,
     ):
         rows = []
-        current_values = (
-            float(self.params.get("expected_return_pre", 0.0)),
-            float(self.params.get("vol_pre", 0.0)),
-            float(self.params.get("expected_return_post", 0.0)),
-            float(self.params.get("vol_post", 0.0)),
-        )
+        return_assumption_info = self.params.get("return_assumption_info", {}) or {}
+        selected_label = str(return_assumption_info.get("선택", ""))
 
-        for scenario_name, scenario_values in SCENARIO_OPTIONS.items():
+        comparison_vol_pre = float(
+            self.params.get("vol_pre", ALPHA_MODEL_BASE_VOLATILITY * 100.0)
+        )
+        selected_allocation_label = str(
+            return_assumption_info.get(
+                "은퇴 후 자산배분",
+                ALPHA_MODEL_DEFAULT_RETIREMENT_ALLOCATION_LABEL,
+            )
+        )
+        fallback_allocation = ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS[
+            ALPHA_MODEL_DEFAULT_RETIREMENT_ALLOCATION_LABEL
+        ]
+        selected_allocation = ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS.get(
+            selected_allocation_label,
+            fallback_allocation,
+        )
+        stock_weight = float(
+            return_assumption_info.get(
+                "은퇴 후 주식비중",
+                selected_allocation["stock_weight"] * 100.0,
+            )
+        ) / 100.0
+        cash_weight = float(
+            return_assumption_info.get(
+                "은퇴 후 현금비중",
+                selected_allocation["cash_weight"] * 100.0,
+            )
+        ) / 100.0
+        cash_return = float(
+            return_assumption_info.get(
+                "현금수익률",
+                ALPHA_MODEL_CASH_RETURN * 100.0,
+            )
+        ) / 100.0
+        comparison_vol_post = comparison_vol_pre * stock_weight
+
+        for discount_label, discount_rate in ALPHA_MODEL_DISCOUNT_OPTIONS.items():
+            adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - float(discount_rate))
+            scenario_values = (
+                adjusted_cagr * 100.0,
+                comparison_vol_pre,
+                ((adjusted_cagr * stock_weight) + (cash_return * cash_weight)) * 100.0,
+                comparison_vol_post,
+            )
+
             temp_params = self.params.copy()
             (
                 temp_params["expected_return_pre"],
@@ -608,6 +653,20 @@ class FinancialSimulator:
                 temp_params["expected_return_post"],
                 temp_params["vol_post"],
             ) = scenario_values
+            temp_params["return_assumption_info"] = {
+                **return_assumption_info,
+                "선택": discount_label,
+                "적용 할인율": float(discount_rate) * 100.0,
+                "은퇴 후 자산배분": selected_allocation_label,
+                "은퇴 후 주식비중": stock_weight * 100.0,
+                "은퇴 후 현금비중": cash_weight * 100.0,
+                "현금수익률": cash_return * 100.0,
+                "은퇴 전 기대수익률": scenario_values[0],
+                "은퇴 전 변동성": scenario_values[1],
+                "은퇴 후 기대수익률": scenario_values[2],
+                "은퇴 후 변동성": scenario_values[3],
+            }
+
             temp_sim = FinancialSimulator(temp_params)
             result = temp_sim.run_hybrid_analysis(main_sims=sims, search_sims=search_sims)
 
@@ -617,10 +676,15 @@ class FinancialSimulator:
             post_assets = result["pv"][:, retire_idx:]
             retire_assets = np.maximum(result["pv"][:, retire_idx], 1.0)
             half_asset_rate = np.mean(np.min(post_assets, axis=1) <= retire_assets * 0.5) * 100
-            is_current = tuple(float(x) for x in scenario_values) == current_values
+            is_current = discount_label == selected_label
 
             rows.append({
-                "시나리오": scenario_name + (" *" if is_current else ""),
+                "할인율": discount_label + (" *" if is_current else ""),
+                "은퇴 전 수익률": scenario_values[0],
+                "은퇴 후 수익률": scenario_values[2],
+                "은퇴 후 자산배분": selected_allocation_label,
+                "은퇴 전 변동성": scenario_values[1],
+                "은퇴 후 변동성": scenario_values[3],
                 "파산확률": result["base_ruin"],
                 "안전 여유자금(만원/월)": result["safe_extra"],
                 "상하위30% 제외 평균 여유자금(만원/월)": result["trimmed_avg_extra"],

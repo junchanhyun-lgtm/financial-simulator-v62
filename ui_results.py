@@ -26,7 +26,6 @@ from config import (
     MAX_TOTAL_ANNUAL_RETURN,
     RANDOM_SEED,
     RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON,
-    SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
     TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
     TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
@@ -161,8 +160,8 @@ def render_data_assumption_section():
             },
         )
         st.caption(
-            "국내퀀트 7월말~11월말 단기채 구간은 별도 국내 단기채 월별 자료가 없어 0%로 두었습니다. "
-            "V62-1 기본 엔진은 계좌별 원자료를 직접 합성하지 않고 통합 시나리오의 검토 근거로만 사용합니다."
+            "국내퀀트 7월말-11월말 단기채 구간은 별도 국내 단기채 월별 자료가 없어 0%로 두었습니다. "
+            "V62-7 기본 엔진은 계좌별 원자료를 직접 합성하지 않고 후보1 수익률 가정의 검토 근거로만 사용합니다."
         )
 
 
@@ -181,7 +180,7 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
             fill="toself",
             fillcolor="rgba(46, 134, 193, 0.14)",
             line=dict(color="rgba(255,255,255,0)"),
-            name="10~90% 범위",
+            name="10-90% 범위",
             hoverinfo="skip",
         )
     )
@@ -256,7 +255,7 @@ def render_return_distribution_diagnostics_section(res):
     with st.expander("📐 수익률 분포 검증", expanded=True):
         st.caption(
             f"팻테일 난수의 양쪽 꼬리를 점검합니다. 보정 범위는 "
-            f"연 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}%~+{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%입니다. "
+            f"연 하방 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% / 상방 +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%입니다. "
             "하방·상방 보정률이 높으면 수익률 가정이나 변동성 가정을 재검토해야 합니다."
         )
         return_diag_df = build_return_distribution_diagnostics(res)
@@ -293,16 +292,20 @@ def render_scenario_comparison_section(res):
     if scenario_df is None or scenario_df.empty:
         return
 
-    with st.expander("📊 시나리오별 결과 비교", expanded=True):
+    with st.expander("📊 할인율별 결과 비교", expanded=True):
         st.caption(
-            "보수·기본·공격 통합 시나리오를 같은 입력값 기준으로 비교합니다. "
-            "현재 선택된 시나리오에는 * 표시가 붙습니다."
+            "10% 할인부터 50% 할인까지 같은 입력값 기준으로 비교합니다. "
+            "현재 선택된 할인율에는 * 표시가 붙습니다."
         )
         st.dataframe(
             scenario_df,
             use_container_width=True,
             hide_index=True,
             column_config={
+                "은퇴 전 수익률": st.column_config.NumberColumn(format="%.2f%%"),
+                "은퇴 후 수익률": st.column_config.NumberColumn(format="%.2f%%"),
+                "은퇴 전 변동성": st.column_config.NumberColumn(format="%.2f%%"),
+                "은퇴 후 변동성": st.column_config.NumberColumn(format="%.2f%%"),
                 "파산확률": st.column_config.NumberColumn(format="%.1f%%"),
                 "은퇴시점 중앙값(억)": st.column_config.NumberColumn(format="%.2f"),
                 "은퇴시점 하위10%(억)": st.column_config.NumberColumn(format="%.2f"),
@@ -406,6 +409,22 @@ def render_stress_budget_section(stress_df, target_ruin):
 
 def render_applied_model_section(res):
     defense_rate = res["defense_rate"]
+    return_assumption_info = res.get("return_assumption_info", {}) or {}
+
+    if return_assumption_info:
+        assumption_setting = (
+            f"{return_assumption_info.get('모델', '-')} / {return_assumption_info.get('선택', '-')} / "
+            f"{return_assumption_info.get('은퇴 후 자산배분', '-')} / "
+            f"은퇴전 {float(return_assumption_info.get('은퇴 전 기대수익률', 0.0)):.2f}%·{float(return_assumption_info.get('은퇴 전 변동성', 0.0)):.2f}% / "
+            f"은퇴후 {float(return_assumption_info.get('은퇴 후 기대수익률', 0.0)):.2f}%·{float(return_assumption_info.get('은퇴 후 변동성', 0.0)):.2f}%"
+        )
+        assumption_meaning = return_assumption_info.get(
+            "설명",
+            "현재 선택된 수익률·변동성 입력값입니다.",
+        )
+    else:
+        assumption_setting = "후보1 알파 감소 모델"
+        assumption_meaning = "할인율별 수익률과 은퇴 후 주식 현금 자산배분 기준 변동성을 사용합니다."
 
     model_df = pd.DataFrame(
         [
@@ -420,9 +439,9 @@ def render_applied_model_section(res):
                 "의미": "국내퀀트·연금저축/ISA·VOO를 장기 계좌별로 강제 분리하지 않고, 전체 금융자산의 통합 기대수익률·변동성으로 계산합니다.",
             },
             {
-                "모델": "시나리오 수익률",
-                "현재 설정": "보수/기본/공격 통합 시나리오",
-                "의미": "업로드 자료의 원자료 CAGR은 참고값으로만 두고, 미래 알파 감소와 운용 현실성을 반영한 통합 수익률 가정을 사용합니다.",
+                "모델": "선택 수익률 가정",
+                "현재 설정": assumption_setting,
+                "의미": assumption_meaning,
             },
             {
                 "모델": "연금저축 납입",
@@ -466,7 +485,7 @@ def render_applied_model_section(res):
             },
             {
                 "모델": "연간수익률 보정 범위",
-                "현재 설정": f"{MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% ~ +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%",
+                "현재 설정": f"하방 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% / 상방 +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%",
                 "의미": "팻테일 난수가 만드는 비현실적 초극단 손실과 초극단 상승을 양쪽에서 보정합니다.",
             },
             {
