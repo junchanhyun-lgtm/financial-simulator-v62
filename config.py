@@ -1,12 +1,12 @@
-APP_VERSION = "V62-1"
+APP_VERSION = "V62-2"
 
-PAGE_TITLE = "My Quant Asset Sim (V62-1)"
+PAGE_TITLE = "My Quant Asset Sim (V62-2)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V62-1)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V62-2)"
 
 UPDATE_MESSAGE = (
-    "💡 V62-1 업데이트: 계좌별 장기분리 엔진을 통합자산 모델로 복귀하고, "
-    "연금저축 연 600만 원·ISA 추가납입 0원 원칙과 원인분해/시나리오/민감도 기능 유지"
+    "💡 V62-2 업데이트: 수익률 하방·상방 보정 범위를 -60%~+100%로 조정하고, "
+    "수익률 분포 검증 패널을 추가"
 )
 
 N_SIMULATIONS = 5000
@@ -22,8 +22,11 @@ RANDOM_SEED = 20260520
 
 # 수익률 분포 현실화 기본값
 # 모든 현실화 기능은 토글 없이 기본 적용합니다.
+# 팻테일 난수는 유지하되, 총 금융자산 포트폴리오에 비현실적인 초극단값은
+# 하방·상방을 모두 보정해 결과 해석 왜곡을 줄입니다.
 FAT_TAIL_DF = 10
-MIN_TOTAL_ANNUAL_RETURN = -0.95
+MIN_TOTAL_ANNUAL_RETURN = -0.60
+MAX_TOTAL_ANNUAL_RETURN = 1.00
 INFLATION_SHOCK_ANNUAL_PROBABILITY = 0.025
 INFLATION_SHOCK_DURATION_YEARS = 3
 INFLATION_SHOCK_INFLATION_ADDON = 0.04

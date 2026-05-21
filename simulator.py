@@ -16,6 +16,7 @@ from config import (
     INITIAL_VOO_ASSET_MANWON,
     MEAN_REVERSION_STRENGTH,
     MIN_TOTAL_ANNUAL_RETURN,
+    MAX_TOTAL_ANNUAL_RETURN,
     QUANT_SIZE_PENALTY_TIERS,
     RANDOM_SEED,
     SCENARIO_COMPARISON_SEARCH_SIMULATIONS,
@@ -342,8 +343,10 @@ class FinancialSimulator:
             excess_prev = sim_returns[:, t - 1] - mu_matrix[:, t - 1]
             sim_returns[:, t] = temp_returns[:, t] - (MEAN_REVERSION_STRENGTH * excess_prev)
 
-        return_floor_mask = sim_returns < MIN_TOTAL_ANNUAL_RETURN
-        sim_returns = np.maximum(sim_returns, MIN_TOTAL_ANNUAL_RETURN)
+        raw_returns = sim_returns.copy()
+        return_floor_mask = raw_returns < MIN_TOTAL_ANNUAL_RETURN
+        return_ceiling_mask = raw_returns > MAX_TOTAL_ANNUAL_RETURN
+        sim_returns = np.clip(raw_returns, MIN_TOTAL_ANNUAL_RETURN, MAX_TOTAL_ANNUAL_RETURN)
 
         market_index_matrix = np.cumprod(1 + sim_returns, axis=1) * 100.0
         high_water_mark_matrix = np.maximum.accumulate(market_index_matrix, axis=1)
@@ -407,7 +410,7 @@ class FinancialSimulator:
             scale_penalty = self._quant_size_penalty(estimated_quant_assets_manwon)
             quant_penalty_matrix[:, t] = scale_penalty
             adj_return = sim_returns[:, t] - scale_penalty
-            adj_return = np.maximum(adj_return, MIN_TOTAL_ANNUAL_RETURN)
+            adj_return = np.clip(adj_return, MIN_TOTAL_ANNUAL_RETURN, MAX_TOTAL_ANNUAL_RETURN)
 
             gain_on_base = current_assets * adj_return
             gain_on_cashflow = net_cashflow * (adj_return / 2.0)
@@ -423,6 +426,7 @@ class FinancialSimulator:
             "pv": sim_assets_pv,
             "nom": sim_assets_nom,
             "returns": sim_returns,
+            "raw_returns": raw_returns,
             "shock_mask": shock_mask,
             "inflation_matrix": inflation_matrix,
             "quant_penalty": quant_penalty_matrix,
@@ -430,6 +434,7 @@ class FinancialSimulator:
             "net_cashflow_pv": net_cashflow_pv_matrix,
             "withdrawal_pv": withdrawal_pv_matrix,
             "return_floor_mask": return_floor_mask,
+            "return_ceiling_mask": return_ceiling_mask,
             "market_index": market_index_matrix,
         }
 
@@ -670,6 +675,7 @@ def build_failure_diagnostics(result, retire_age):
     quant_penalty = result.get("quant_penalty")
     withdrawal_pv = result.get("withdrawal_pv")
     return_floor_mask = result.get("return_floor_mask")
+    return_ceiling_mask = result.get("return_ceiling_mask")
 
     ruin_mask = np.any(pv <= 0, axis=1)
     survive_mask = ~ruin_mask
@@ -757,10 +763,19 @@ def build_failure_diagnostics(result, retire_age):
     if return_floor_mask is not None:
         pre_retire_floor = np.any(return_floor_mask[:, : retire_idx + 1], axis=1)
         diag_rows.append({
-            "항목": "은퇴 전 수익률 하한선 경험률",
+            "항목": "은퇴 전 수익률 하방 보정 경험률",
             "실패 경로": format_pct(np.mean(pre_retire_floor[ruin_mask]) * 100 if fail_count else np.nan),
             "생존 경로": format_pct(np.mean(pre_retire_floor[survive_mask]) * 100 if survive_mask.any() else np.nan),
-            "해석": f"연간수익률 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% 하한에 걸린 극단 경로 비율",
+            "해석": f"보정 전 연간수익률이 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}%보다 낮았던 경로 비율",
+        })
+
+    if return_ceiling_mask is not None:
+        pre_retire_ceiling = np.any(return_ceiling_mask[:, : retire_idx + 1], axis=1)
+        diag_rows.append({
+            "항목": "은퇴 전 수익률 상방 보정 경험률",
+            "실패 경로": format_pct(np.mean(pre_retire_ceiling[ruin_mask]) * 100 if fail_count else np.nan),
+            "생존 경로": format_pct(np.mean(pre_retire_ceiling[survive_mask]) * 100 if survive_mask.any() else np.nan),
+            "해석": f"보정 전 연간수익률이 +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%보다 높았던 경로 비율",
         })
 
     reasons = []
@@ -790,7 +805,12 @@ def build_failure_diagnostics(result, retire_age):
         if return_floor_mask is not None:
             fail_floor = np.mean(np.any(return_floor_mask[ruin_mask, : retire_idx + 1], axis=1)) if fail_count else 0.0
             if fail_floor > 0.20:
-                reasons.append("일부 실패 경로에는 극단적 연간손실 하한에 걸린 경로도 포함되어 있습니다.")
+                reasons.append("일부 실패 경로에는 하방 보정이 필요한 극단적 연간손실 경로도 포함되어 있습니다.")
+
+        if return_ceiling_mask is not None:
+            survive_ceiling = np.mean(np.any(return_ceiling_mask[survive_mask, : retire_idx + 1], axis=1)) if survive_mask.any() else 0.0
+            if survive_ceiling > 0.20:
+                reasons.append("일부 생존 경로에는 상방 보정이 필요한 극단적 연간상승 경로도 포함되어 있습니다.")
 
     if not reasons:
         reasons.append("특정 단일 원인보다 수익률 경로, 지출 이벤트, 인플레이션의 복합효과로 해석하는 편이 안전합니다.")
@@ -799,3 +819,71 @@ def build_failure_diagnostics(result, retire_age):
         "diagnostic_df": pd.DataFrame(diag_rows),
         "reason_text": " ".join(reasons),
     }
+
+
+
+def build_return_distribution_diagnostics(result):
+    """수익률 분포의 하방·상방 꼬리와 보정 발생률을 점검합니다."""
+    returns = np.asarray(result.get("returns"), dtype=float)
+    raw_returns = result.get("raw_returns")
+    raw_returns = np.asarray(raw_returns, dtype=float) if raw_returns is not None else returns
+    pv = np.asarray(result.get("pv"), dtype=float)
+
+    return_floor_mask = result.get("return_floor_mask")
+    return_ceiling_mask = result.get("return_ceiling_mask")
+
+    if return_floor_mask is None:
+        return_floor_mask = raw_returns < MIN_TOTAL_ANNUAL_RETURN
+    if return_ceiling_mask is None:
+        return_ceiling_mask = raw_returns > MAX_TOTAL_ANNUAL_RETURN
+
+    ruin_mask = np.any(pv <= 0, axis=1) if pv.size else np.zeros(returns.shape[0], dtype=bool)
+    survive_mask = ~ruin_mask
+
+    def _fmt_pct_or_dash(value, digits=1, force_sign=False):
+        if value is None or pd.isna(value):
+            return "-"
+        sign = "+" if force_sign and value > 0 else ""
+        return f"{sign}{float(value):.{digits}f}%"
+
+    def _summarize(label, path_mask):
+        if not np.any(path_mask):
+            return {
+                "구분": label,
+                "보정 전 최저": "-",
+                "보정 전 최고": "-",
+                "보정 후 1%": "-",
+                "보정 후 중앙값": "-",
+                "보정 후 99%": "-",
+                "하방 보정률": "-",
+                "상방 보정률": "-",
+                "하방 보정 경험률": "-",
+                "상방 보정 경험률": "-",
+            }
+
+        raw_subset = raw_returns[path_mask]
+        clipped_subset = returns[path_mask]
+        floor_subset = np.asarray(return_floor_mask[path_mask], dtype=bool)
+        ceiling_subset = np.asarray(return_ceiling_mask[path_mask], dtype=bool)
+
+        return {
+            "구분": label,
+            "보정 전 최저": _fmt_pct_or_dash(np.min(raw_subset) * 100),
+            "보정 전 최고": _fmt_pct_or_dash(np.max(raw_subset) * 100, force_sign=True),
+            "보정 후 1%": _fmt_pct_or_dash(np.percentile(clipped_subset, 1) * 100),
+            "보정 후 중앙값": _fmt_pct_or_dash(np.percentile(clipped_subset, 50) * 100),
+            "보정 후 99%": _fmt_pct_or_dash(np.percentile(clipped_subset, 99) * 100, force_sign=True),
+            "하방 보정률": _fmt_pct_or_dash(np.mean(floor_subset) * 100),
+            "상방 보정률": _fmt_pct_or_dash(np.mean(ceiling_subset) * 100),
+            "하방 보정 경험률": _fmt_pct_or_dash(np.mean(np.any(floor_subset, axis=1)) * 100),
+            "상방 보정 경험률": _fmt_pct_or_dash(np.mean(np.any(ceiling_subset, axis=1)) * 100),
+        }
+
+    all_mask = np.ones(returns.shape[0], dtype=bool)
+    rows = [
+        _summarize("전체 경로", all_mask),
+        _summarize("파산 경로", ruin_mask),
+        _summarize("생존 경로", survive_mask),
+    ]
+
+    return pd.DataFrame(rows)

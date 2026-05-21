@@ -23,6 +23,7 @@ from config import (
     ISA_MATURITY_TO_PENSION_DEFAULT_MANWON,
     MEAN_REVERSION_STRENGTH,
     MIN_TOTAL_ANNUAL_RETURN,
+    MAX_TOTAL_ANNUAL_RETURN,
     RANDOM_SEED,
     RETIREMENT_SAVINGS_ANNUAL_CONTRIBUTION_MANWON,
     SCENARIO_OPTIONS,
@@ -32,7 +33,7 @@ from config import (
     WARNING_RUIN_PROB,
 )
 from risk_metrics import build_real_life_risk_table
-from simulator import build_failure_diagnostics
+from simulator import build_failure_diagnostics, build_return_distribution_diagnostics
 
 
 def _fmt_eok(value_won):
@@ -251,6 +252,21 @@ def render_failure_diagnostics_section(res):
         st.info(diag["reason_text"])
 
 
+def render_return_distribution_diagnostics_section(res):
+    with st.expander("📐 수익률 분포 검증", expanded=True):
+        st.caption(
+            f"팻테일 난수의 양쪽 꼬리를 점검합니다. 보정 범위는 "
+            f"연 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}%~+{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%입니다. "
+            "하방·상방 보정률이 높으면 수익률 가정이나 변동성 가정을 재검토해야 합니다."
+        )
+        return_diag_df = build_return_distribution_diagnostics(res)
+        st.dataframe(return_diag_df, use_container_width=True, hide_index=True)
+        st.info(
+            "보정 전 최저·최고는 팻테일 난수가 만든 원래 값입니다. "
+            "보정 후 분위수는 실제 자산 계산에 적용된 수익률 기준입니다."
+        )
+
+
 def render_real_life_risk_section(res):
     risk_df = build_real_life_risk_table(res)
 
@@ -449,9 +465,9 @@ def render_applied_model_section(res):
                 "의미": "정규분포보다 극단 손실을 더 반영하되, 폭락 후 자동 회복 가정은 약하게 둡니다.",
             },
             {
-                "모델": "연간수익률 하한",
-                "현재 설정": f"{MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% 하한",
-                "의미": "t분포 난수가 만드는 -100% 이하 비현실적 연간수익률을 차단합니다.",
+                "모델": "연간수익률 보정 범위",
+                "현재 설정": f"{MIN_TOTAL_ANNUAL_RETURN * 100:.0f}% ~ +{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%",
+                "의미": "팻테일 난수가 만드는 비현실적 초극단 손실과 초극단 상승을 양쪽에서 보정합니다.",
             },
             {
                 "모델": "고물가 쇼크",
@@ -552,6 +568,7 @@ def render_results_page(res):
     st.markdown("---")
 
     render_failure_diagnostics_section(res)
+    render_return_distribution_diagnostics_section(res)
     render_real_life_risk_section(res)
     render_scenario_comparison_section(res)
     render_sensitivity_section(res)

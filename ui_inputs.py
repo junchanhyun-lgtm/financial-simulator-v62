@@ -23,6 +23,8 @@ from config import (
     INITIAL_QUANT_ASSET_MANWON,
     INITIAL_VOO_ASSET_MANWON,
     MEAN_REVERSION_STRENGTH,
+    MIN_TOTAL_ANNUAL_RETURN,
+    MAX_TOTAL_ANNUAL_RETURN,
     SCENARIO_OPTIONS,
     STANDARD_TARGET_RUIN_PROB,
     WARNING_RUIN_PROB,
@@ -58,9 +60,9 @@ def render_applied_model_preview():
                     "의미": "국내퀀트에서 연금저축+ISA로 매년 이체하는 계획을 수익률·변동성 경로에 반영합니다.",
                 },
                 {
-                    "모델": "극단 손실 가능성",
-                    "적용값": f"팻테일 t분포 df={FAT_TAIL_DF}",
-                    "의미": "정규분포보다 큰 손실이 더 자주 발생하도록 반영합니다.",
+                    "모델": "극단 손익 가능성",
+                    "적용값": f"팻테일 t분포 df={FAT_TAIL_DF}, 보정 {MIN_TOTAL_ANNUAL_RETURN * 100:.0f}%~+{MAX_TOTAL_ANNUAL_RETURN * 100:.0f}%",
+                    "의미": "정규분포보다 두꺼운 꼬리를 반영하되, 총자산 포트폴리오에 비현실적인 초극단값은 양쪽에서 보정합니다.",
                 },
                 {
                     "모델": "고물가 쇼크",
