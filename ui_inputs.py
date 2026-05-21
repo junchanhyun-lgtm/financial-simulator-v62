@@ -51,7 +51,7 @@ def _build_discount_scenario_table(stock_weight, cash_weight):
         adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - float(discount_rate))
         post_return = (adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
         rows.append({
-            "할인율": label,
+            "수익률 시나리오": label,
             "은퇴 전 수익률": adjusted_cagr * 100.0,
             "은퇴 후 수익률": post_return * 100.0,
             "은퇴 전 변동성": ALPHA_MODEL_BASE_VOLATILITY * 100.0,
@@ -80,7 +80,7 @@ def render_applied_model_preview():
                 {
                     "모델": "포트폴리오 전환",
                     "적용값": f"은퇴 전까지 연 {ANNUAL_TRANSFER_TO_DUAL_MANWON:,}만 원 이동",
-                    "의미": "국내퀀트에서 연금저축+ISA로 매년 이체하는 계획을 수익률·변동성 경로에 반영합니다.",
+                    "의미": "계좌 간 이동은 총 금융자산에는 중립이므로 기본 수익률 경로에는 반영하지 않습니다.",
                 },
                 {
                     "모델": "극단 손익 가능성",
@@ -198,7 +198,7 @@ def render_input_panel():
                 "수익률",
                 discount_labels,
                 index=default_discount_index,
-                help="후보1 전략의 백테스트 CAGR에 알파 감소 할인율을 적용합니다.",
+                help="후보1 전략의 백테스트 CAGR에 현실화 할인율을 적용합니다.",
             )
 
             allocation_labels = list(ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS.keys())
@@ -265,7 +265,7 @@ def render_input_panel():
                 "은퇴 후 변동성": vol_post,
                 "참고 MDD": reference_mdd_pre,
                 "은퇴 후 참고 MDD": reference_mdd_post,
-                "설명": "후보1 알파 감소 모델입니다. 은퇴 전은 할인율별 수익률과 18.5% 변동성을 쓰고, 은퇴 후는 선택한 주식 현금 배분으로 수익률과 변동성을 계산합니다.",
+                "설명": "후보1 알파 감소 모델입니다. 은퇴 전은 긍정·보통·보수 수익률 시나리오와 18.5% 변동성을 쓰고, 은퇴 후는 선택한 주식 현금 배분으로 수익률과 변동성을 계산합니다.",
             }
 
             st.info(

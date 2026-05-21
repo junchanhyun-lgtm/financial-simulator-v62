@@ -1,11 +1,11 @@
-APP_VERSION = "V62-7"
+APP_VERSION = "V62-8"
 
-PAGE_TITLE = "My Quant Asset Sim (V62-7)"
+PAGE_TITLE = "My Quant Asset Sim (V62-8)"
 
-MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V62-7)"
+MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V62-8)"
 
 UPDATE_MESSAGE = (
-    "💡 V62-7 업데이트: 할인율별 수익률 모델에 은퇴 후 주식 7 현금 3 또는 주식 6 현금 4 자산배분을 적용"
+    "💡 V62-8 업데이트: 수익률 시나리오를 긍정·보통·보수 3단계로 정리하고, 후보1 국내퀀트 8개월 운용규모 페널티를 현실화"
 )
 
 N_SIMULATIONS = 5000
@@ -34,7 +34,7 @@ INFLATION_SHOCK_VOL_MULTIPLIER = 1.30
 MEAN_REVERSION_STRENGTH = 0.05
 
 # 자동 적용 플래그
-# V62-7에서는 계좌이동 기반 포트폴리오 전환을 기본 엔진에서 제거합니다.
+# V62-8에서는 계좌이동 기반 포트폴리오 전환을 기본 엔진에서 제거합니다.
 AUTO_APPLY_DWZ_SPENDING = True
 AUTO_APPLY_FLEX_SPENDING = True
 AUTO_APPLY_PORTFOLIO_TRANSITION = False
@@ -68,7 +68,7 @@ TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON = 10000
 
 # 현재 포트폴리오 기준:
 # 국내 퀀트 10.7억 + 연금저축/ISA 듀얼모멘텀 1.2억 + VOO 0.7억 = 총 12.6억
-# V62-7 기본 엔진은 계좌별 잔고를 따로 굴리지 않고 총 금융자산 통합 시뮬레이션을 수행합니다.
+# V62-8 기본 엔진은 계좌별 잔고를 따로 굴리지 않고 총 금융자산 통합 시뮬레이션을 수행합니다.
 # 후보1 알파 감소 모델
 # 전략명: 국내퀀트 11월말-7월말 + VOO 7월말-11월말
 # 분석기간: 2006년 11월말-2024년 11월말, 2024년 12월-2026년 4월 제외
@@ -80,13 +80,11 @@ ALPHA_MODEL_BASE_VOLATILITY = 0.1850
 ALPHA_MODEL_BASE_MDD = -0.2227
 
 ALPHA_MODEL_DISCOUNT_OPTIONS = {
-    "10% 할인": 0.10,
-    "20% 할인": 0.20,
-    "30% 할인": 0.30,
-    "40% 할인": 0.40,
-    "50% 할인": 0.50,
+    "긍정적 시나리오 30% 할인": 0.30,
+    "보통 시나리오 40% 할인": 0.40,
+    "보수적 시나리오 50% 할인": 0.50,
 }
-ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL = "30% 할인"
+ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL = "보통 시나리오 40% 할인"
 
 # 은퇴 후에는 전략을 100% 유지하지 않고, 주식전략과 현금성 자산을 섞은 배분으로 계산합니다.
 # 현금수익률은 명목 기준 보수적 중립값으로 두며, 현금 변동성은 0%로 봅니다.
@@ -98,7 +96,7 @@ ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS = {
 }
 
 # 업로드 자료 기반 원자료 분석 요약
-# V62-7에서는 계좌별 엔진을 기본으로 쓰지 않지만, 수익률 가정 검토용 참고값으로 유지합니다.
+# V62-8에서는 계좌별 엔진을 기본으로 쓰지 않지만, 수익률 가정 검토용 참고값으로 유지합니다.
 DATA_ANALYSIS_SUMMARY = [
     {
         "자산/전략": "국내퀀트 조합",
@@ -149,8 +147,12 @@ ISA_MATURITY_TO_PENSION_DEFAULT_MANWON = 0
 ANNUAL_TRANSFER_TO_DUAL_MANWON = 0
 
 # 국내퀀트 운용규모 페널티
-# 통합자산 모델에서는 현재 국내퀀트 시작비중을 기준으로 추정 국내퀀트 운용금액을 산출합니다.
-# 단위: 만 원, 페널티는 연 수익률 차감률(decimal)
+# 후보1 전략은 11월말-7월말 8개월만 국내퀀트를 운용합니다.
+# 은퇴 전에는 총 금융자산의 주식전략 부분 전체를 후보1로 보고, 은퇴 후에는 선택한 주식비중만 후보1로 봅니다.
+# 구간별 페널티는 국내퀀트 운용금액 기준 연 수익률 차감률이며, 실제 적용 시 8/12만 반영합니다.
+QUANT_STRATEGY_MONTHS_PER_YEAR = 8
+QUANT_SIZE_PENALTY_ANNUAL_RATIO = QUANT_STRATEGY_MONTHS_PER_YEAR / 12.0
+
 QUANT_SIZE_PENALTY_TIERS = [
     (150000, 0.000),  # 15억 이하
     (250000, 0.003),  # 15억 초과-25억

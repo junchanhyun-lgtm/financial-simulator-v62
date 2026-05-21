@@ -24,6 +24,7 @@ from config import (
     MIN_TOTAL_ANNUAL_RETURN,
     MAX_TOTAL_ANNUAL_RETURN,
     QUANT_SIZE_PENALTY_TIERS,
+    QUANT_SIZE_PENALTY_ANNUAL_RATIO,
     RANDOM_SEED,
     SCENARIO_COMPARISON_SEARCH_SIMULATIONS,
     SCENARIO_COMPARISON_SIMULATIONS,
@@ -159,19 +160,29 @@ class FinancialSimulator:
         v_pre = self.params["vol_pre"] / 100.0
         v_post = self.params["vol_post"] / 100.0
 
+        return_assumption_info = self.params.get("return_assumption_info", {}) or {}
+        post_stock_weight = float(
+            return_assumption_info.get("은퇴 후 주식비중", 70.0)
+        ) / 100.0
+        post_stock_weight = float(np.clip(post_stock_weight, 0.0, 1.0))
+
         mu_base = np.zeros(len(years))
         vol_base = np.zeros(len(years))
-        quant_share_base = np.full(len(years), self._initial_quant_share(), dtype=float)
+        quant_exposure_base = np.zeros(len(years), dtype=float)
 
         for t, age in enumerate(years):
             if age < retire_age:
                 mu_base[t] = ret_pre
                 vol_base[t] = v_pre
+                # 후보1 은퇴 전 구간은 전체 금융자산을 주식전략으로 운용한다고 봅니다.
+                quant_exposure_base[t] = 1.0
             else:
                 mu_base[t] = ret_post
                 vol_base[t] = v_post
+                # 은퇴 후에는 선택한 주식전략 비중만 후보1 규모 페널티 대상입니다.
+                quant_exposure_base[t] = post_stock_weight
 
-        return mu_base, vol_base, quant_share_base
+        return mu_base, vol_base, quant_exposure_base
 
     @staticmethod
     def _build_inflation_shock_mask(
@@ -326,7 +337,7 @@ class FinancialSimulator:
 
         event_arrays = self._build_event_arrays(years)
 
-        mu_base, vol_base, quant_share_base = self._build_return_assumption_paths(years=years)
+        mu_base, vol_base, quant_exposure_base = self._build_return_assumption_paths(years=years)
         mu_matrix = np.tile(mu_base, (n_simulations, 1))
         vol_matrix = np.tile(vol_base, (n_simulations, 1))
 
@@ -411,8 +422,8 @@ class FinancialSimulator:
             net_cashflow_pv_matrix[:, t] = net_cashflow / df_factor
             withdrawal_pv_matrix[:, t] = np.maximum(-net_cashflow, 0.0) / df_factor
 
-            estimated_quant_assets_manwon = (current_assets / 10000.0) * quant_share_base[t]
-            scale_penalty = self._quant_size_penalty(estimated_quant_assets_manwon)
+            estimated_quant_assets_manwon = (current_assets / 10000.0) * quant_exposure_base[t]
+            scale_penalty = self._quant_size_penalty(estimated_quant_assets_manwon) * QUANT_SIZE_PENALTY_ANNUAL_RATIO
             quant_penalty_matrix[:, t] = scale_penalty
             adj_return = sim_returns[:, t] - scale_penalty
             adj_return = np.clip(adj_return, MIN_TOTAL_ANNUAL_RETURN, MAX_TOTAL_ANNUAL_RETURN)
@@ -679,7 +690,7 @@ class FinancialSimulator:
             is_current = discount_label == selected_label
 
             rows.append({
-                "할인율": discount_label + (" *" if is_current else ""),
+                "수익률 시나리오": discount_label + (" *" if is_current else ""),
                 "은퇴 전 수익률": scenario_values[0],
                 "은퇴 후 수익률": scenario_values[2],
                 "은퇴 후 자산배분": selected_allocation_label,
@@ -809,10 +820,10 @@ def build_failure_diagnostics(result, retire_age):
 
     if quant_penalty is not None:
         diag_rows.append({
-            "항목": "국내퀀트 페널티 평균값 중앙값",
+            "항목": "국내퀀트 규모 페널티 중앙값",
             "실패 경로": format_pct(median_or_nan(np.mean(quant_penalty[ruin_mask], axis=1)) * 100),
             "생존 경로": format_pct(median_or_nan(np.mean(quant_penalty[survive_mask], axis=1)) * 100),
-            "해석": "통합자산 중 국내퀀트 추정비중에 따른 수익률 차감 효과",
+            "해석": "후보1 국내퀀트 8개월 운용규모에 따른 연 수익률 차감 효과",
         })
 
     if withdrawal_pv is not None:

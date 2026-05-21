@@ -30,6 +30,8 @@ from config import (
     TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON,
     TRIMMED_AVERAGE_LOWER_EXCLUSION_RATIO,
     WARNING_RUIN_PROB,
+    QUANT_SIZE_PENALTY_ANNUAL_RATIO,
+    QUANT_STRATEGY_MONTHS_PER_YEAR,
 )
 from risk_metrics import build_real_life_risk_table
 from simulator import build_failure_diagnostics, build_return_distribution_diagnostics
@@ -292,10 +294,10 @@ def render_scenario_comparison_section(res):
     if scenario_df is None or scenario_df.empty:
         return
 
-    with st.expander("📊 할인율별 결과 비교", expanded=True):
+    with st.expander("📊 수익률 시나리오별 결과 비교", expanded=True):
         st.caption(
-            "10% 할인부터 50% 할인까지 같은 입력값 기준으로 비교합니다. "
-            "현재 선택된 할인율에는 * 표시가 붙습니다."
+            "긍정적·보통·보수 수익률 시나리오를 같은 입력값 기준으로 비교합니다. "
+            "현재 선택된 시나리오에는 * 표시가 붙습니다."
         )
         st.dataframe(
             scenario_df,
@@ -424,7 +426,7 @@ def render_applied_model_section(res):
         )
     else:
         assumption_setting = "후보1 알파 감소 모델"
-        assumption_meaning = "할인율별 수익률과 은퇴 후 주식 현금 자산배분 기준 변동성을 사용합니다."
+        assumption_meaning = "긍정·보통·보수 수익률 시나리오와 은퇴 후 주식 현금 자산배분 기준 변동성을 사용합니다."
 
     model_df = pd.DataFrame(
         [
@@ -500,8 +502,8 @@ def render_applied_model_section(res):
             },
             {
                 "모델": "국내퀀트 규모 페널티",
-                "현재 설정": f"국내퀀트 시작비중 {INITIAL_QUANT_ASSET_MANWON/(INITIAL_QUANT_ASSET_MANWON+INITIAL_DUAL_MOMENTUM_ASSET_MANWON+INITIAL_VOO_ASSET_MANWON)*100:.1f}% 기준 추정",
-                "의미": "총자산 모델에서도 국내퀀트 비중을 추정해 규모별 수익률 차감만 반영합니다.",
+                "현재 설정": f"후보1 국내퀀트 {QUANT_STRATEGY_MONTHS_PER_YEAR}개월 운용분만 반영",
+                "의미": f"은퇴 전은 총자산의 주식전략 전체, 은퇴 후는 선택한 주식비중만 규모 페널티 대상으로 보고 구간별 차감률의 {QUANT_SIZE_PENALTY_ANNUAL_RATIO*100:.1f}%만 적용합니다.",
             },
             {
                 "모델": "주택·연금·세금 처리",
