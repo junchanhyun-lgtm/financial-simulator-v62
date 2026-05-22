@@ -251,10 +251,109 @@ def render_page_layout():
             color: #3730a3;
         }
 
+        .decision-panel {
+            display: grid;
+            grid-template-columns: minmax(260px, 1.05fr) minmax(360px, 1.55fr);
+            gap: 18px;
+            align-items: stretch;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(226, 232, 240, 0.96);
+            border-radius: 26px;
+            padding: 20px;
+            margin: -4px 0 18px 0;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.09);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .decision-panel::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 6px;
+            background: #64748b;
+        }
+
+        .decision-panel.decision-success::before { background: var(--green); }
+        .decision-panel.decision-warning::before { background: var(--amber); }
+        .decision-panel.decision-danger::before { background: var(--red); }
+
+        .decision-main {
+            padding: 4px 8px 4px 10px;
+        }
+
+        .decision-label {
+            color: #64748b;
+            font-size: 0.83rem;
+            font-weight: 850;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .decision-title {
+            color: #0f172a;
+            font-size: 2.0rem;
+            font-weight: 920;
+            letter-spacing: -0.06em;
+            line-height: 1.05;
+            margin-bottom: 10px;
+        }
+
+        .decision-text {
+            color: #475569;
+            font-size: 0.94rem;
+            line-height: 1.65;
+        }
+
+        .decision-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .decision-item {
+            background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+            border: 1px solid rgba(226, 232, 240, 0.94);
+            border-radius: 20px;
+            padding: 16px 16px 14px 16px;
+            min-height: 116px;
+        }
+
+        .decision-item-label {
+            color: #64748b;
+            font-size: 0.80rem;
+            font-weight: 820;
+            margin-bottom: 8px;
+        }
+
+        .decision-item-value {
+            color: #0f172a;
+            font-size: 1.18rem;
+            font-weight: 880;
+            letter-spacing: -0.035em;
+            line-height: 1.35;
+        }
+
+        .decision-item-value.small {
+            font-size: 0.98rem;
+            letter-spacing: -0.02em;
+        }
+
         .fine-print {
             color: #64748b;
             font-size: 0.85rem;
             line-height: 1.6;
+        }
+
+        @media (max-width: 1100px) {
+            .decision-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .decision-grid {
+                grid-template-columns: 1fr;
+            }
         }
         </style>
         """,
