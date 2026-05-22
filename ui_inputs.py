@@ -241,7 +241,7 @@ def render_input_panel():
 
             with st.expander("⚙️ 적용 기준", expanded=False):
                 st.caption(
-                    f"은퇴 전 변동성은 코스피200 8개월과 S&P500 4개월 패시브 계절 포트폴리오의 약 {ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY * 100:.1f}%를 기준으로, 전략 현실성을 감안해 {vol_pre:.1f}%로 설정했습니다."
+                    f"은퇴 전 변동성은 국내퀀트 합성 원자료의 월수익률 연환산 변동성 {ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY * 100:.1f}%를 기준으로 {vol_pre:.1f}%로 설정했습니다."
                 )
                 st.caption(
                     f"은퇴 후 수익률은 주식전략 {stock_weight * 100:.0f}%와 현금 {cash_weight * 100:.0f}%를 섞어 계산합니다. 현금수익률은 명목 {ALPHA_MODEL_CASH_RETURN * 100:.1f}%로 둡니다."

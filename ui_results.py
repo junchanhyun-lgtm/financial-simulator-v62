@@ -1,3 +1,5 @@
+import html
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -37,8 +39,20 @@ from risk_metrics import build_real_life_risk_table
 from simulator import build_failure_diagnostics, build_return_distribution_diagnostics
 
 
+# -----------------------------------------------------------
+# 공통 표시 유틸
+# -----------------------------------------------------------
 def _fmt_eok(value_won):
+    if value_won is None or pd.isna(value_won):
+        return "-"
     return f"{value_won / 100_000_000:.2f}억 원"
+
+
+def _fmt_manwon(value_manwon):
+    if value_manwon is None or pd.isna(value_manwon):
+        return "-"
+    val = int(round(float(value_manwon)))
+    return f"{val:,}만 원"
 
 
 def _safe_age_index(years, age):
@@ -58,6 +72,16 @@ def _ruin_label(base_ruin):
     return "위험", "inverse"
 
 
+def _status_tone(base_ruin):
+    if base_ruin <= STANDARD_TARGET_RUIN_PROB:
+        return "success", "안전 기준 통과", "기준 파산확률이 안전선 안에 있습니다."
+    if base_ruin <= DWZ_TARGET_RUIN_PROB:
+        return "warning", "DWZ 허용 범위", "엄격한 안전선은 넘지만 DWZ 허용 범위 안입니다."
+    if base_ruin < WARNING_RUIN_PROB:
+        return "warning", "주의", "추가지출이나 은퇴시점 변경 전 재점검이 필요합니다."
+    return "danger", "위험", "파산확률이 위험 경고선을 넘어 지출·은퇴시점 재검토가 필요합니다."
+
+
 def _risk_card_color(value_text):
     try:
         value = float(str(value_text).replace("%", ""))
@@ -70,6 +94,72 @@ def _risk_card_color(value_text):
     return "inverse"
 
 
+def _metric_tone_from_pct(value):
+    if value <= STANDARD_TARGET_RUIN_PROB:
+        return "success"
+    if value < WARNING_RUIN_PROB:
+        return "warning"
+    return "danger"
+
+
+def _escape(value):
+    return html.escape(str(value))
+
+
+def _render_kpi_card(title, value, subtitle, tone="neutral"):
+    st.markdown(
+        f"""
+        <div class="kpi-card {tone}">
+            <div class="kpi-label">{_escape(title)}</div>
+            <div class="kpi-value">{_escape(value)}</div>
+            <div class="kpi-subtitle">{_escape(subtitle)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_section_header(title, subtitle=None):
+    subtitle_html = f"<div class='section-subtitle'>{_escape(subtitle)}</div>" if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="section-card">
+            <div class="section-title">{_escape(title)}</div>
+            {subtitle_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _styled_plotly_layout(fig, height=460, title=None):
+    fig.update_layout(
+        title=title,
+        height=height,
+        paper_bgcolor="rgba(255, 255, 255, 0)",
+        plot_bgcolor="rgba(248, 250, 252, 1)",
+        font=dict(family="Arial, sans-serif", color="#0f172a", size=13),
+        margin=dict(t=48 if title else 30, l=12, r=12, b=24),
+        hoverlabel=dict(bgcolor="#0f172a", font_color="#ffffff"),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(148, 163, 184, 0.18)",
+        zeroline=False,
+        linecolor="rgba(148, 163, 184, 0.35)",
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(148, 163, 184, 0.18)",
+        zeroline=False,
+        linecolor="rgba(148, 163, 184, 0.35)",
+    )
+    return fig
+
+
+# -----------------------------------------------------------
+# 결과 상단 핵심 요약
+# -----------------------------------------------------------
 def render_top_summary_section(res):
     years = res["years"]
     sim_assets_pv = res["pv"]
@@ -86,66 +176,76 @@ def render_top_summary_section(res):
     p10_retire_asset = np.percentile(retire_assets, 10)
     median_retire_asset = np.median(retire_assets)
     median_final_asset = np.median(final_assets)
+    p10_final_asset = np.percentile(final_assets, 10)
 
-    status, delta_color = _ruin_label(base_ruin)
-
-    st.info("💡 아래의 자산·지출·추가사용 가능액은 모두 현시점 구매력, 즉 현재가치 기준입니다.")
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric(
-        "파산확률",
-        f"{base_ruin:.1f}%",
-        f"{status}",
-        delta_color=delta_color,
-    )
-    m2.metric(
-        "안전 여유자금",
-        f"{safe_extra:,}만 원" if safe_extra > 0 else "0만 원",
-        f"DWZ {target_ruin:.0f}% 방어선",
-        delta_color="off",
-    )
-    m3.metric(
-        "상하위 30% 제외 평균 여유자금",
-        f"{trimmed_avg_extra:,}만 원" if trimmed_avg_extra > 0 else "0만 원",
-        f"최종자산 평균 {TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON/10000:.0f}억 이상",
-        delta_color="off",
-    )
-
-    st.caption(
-        "안전 여유자금은 실제 소비 판단 기준입니다. "
-        "상하위 30% 제외 평균 여유자금은 극단적으로 나쁘거나 좋은 경로를 모두 제거한 참고값입니다."
-    )
-
-    a1, a2 = st.columns(2)
-    a1.metric(
-        f"{tgt_retire}세 자산",
-        _fmt_eok(median_retire_asset),
-        f"하위 10%: {_fmt_eok(p10_retire_asset)}",
-        delta_color="off",
-    )
-    a2.metric(
-        f"{years[-1]}세 자산",
-        _fmt_eok(median_final_asset),
-        "중앙값 · 현재가치",
-        delta_color="off",
-    )
+    tone, status_text, status_sentence = _status_tone(base_ruin)
+    badge_class = f"status-badge status-{tone}"
 
     threshold_text = (
-        f"안전 기준 {STANDARD_TARGET_RUIN_PROB:.0f}% · "
-        f"DWZ 기준 {DWZ_TARGET_RUIN_PROB:.0f}% · "
-        f"위험 경고선 {WARNING_RUIN_PROB:.0f}%"
+        f"안전 {STANDARD_TARGET_RUIN_PROB:.0f}% · "
+        f"DWZ {DWZ_TARGET_RUIN_PROB:.0f}% · "
+        f"위험 {WARNING_RUIN_PROB:.0f}%"
     )
 
-    if base_ruin >= WARNING_RUIN_PROB:
-        st.error(f"⚠️ 파산확률이 위험 경고선을 넘었습니다. {threshold_text}")
-    elif base_ruin > DWZ_TARGET_RUIN_PROB:
-        st.warning(f"⚠️ DWZ 허용 기준을 초과했습니다. {threshold_text}")
-    elif base_ruin > STANDARD_TARGET_RUIN_PROB:
-        st.warning(f"⚠️ 안전 기준은 넘지만 DWZ 허용 범위 안입니다. {threshold_text}")
-    else:
-        st.success(f"✅ 안전 기준을 통과했습니다. {threshold_text}")
+    st.markdown(
+        f"""
+        <div class="result-hero">
+            <div class="result-hero-top">
+                <div>
+                    <div class="result-hero-title">결과 핵심 요약</div>
+                    <div class="result-hero-subtitle">
+                        모든 자산·지출·여유자금은 현재가치 기준입니다. 핵심 판단 기준은 파산확률, 월 안전 여유자금, 은퇴시점 하위 10% 자산입니다.
+                    </div>
+                </div>
+                <div class="{badge_class}">{_escape(status_text)}</div>
+            </div>
+            <div class="result-hero-subtitle">
+                {status_sentence} 판단 기준: {threshold_text}. DWZ 기준 추가사용 가능액은 월 {_fmt_manwon(safe_extra)}입니다.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _render_kpi_card(
+            "파산확률",
+            f"{base_ruin:.1f}%",
+            f"목표 방어선 {target_ruin:.0f}%",
+            _metric_tone_from_pct(base_ruin),
+        )
+    with c2:
+        _render_kpi_card(
+            "월 안전 여유자금",
+            _fmt_manwon(safe_extra),
+            "DWZ 방어선 기준 역산",
+            "accent" if safe_extra > 0 else "neutral",
+        )
+    with c3:
+        _render_kpi_card(
+            f"{tgt_retire}세 중앙값",
+            _fmt_eok(median_retire_asset),
+            f"하위 10% {_fmt_eok(p10_retire_asset)}",
+            "accent",
+        )
+    with c4:
+        _render_kpi_card(
+            f"{years[-1]}세 중앙값",
+            _fmt_eok(median_final_asset),
+            f"하위 10% {_fmt_eok(p10_final_asset)}",
+            "neutral",
+        )
+
+    st.caption(
+        f"참고 여유자금: 상하위 30% 제외 평균 기준 월 {_fmt_manwon(trimmed_avg_extra)}. "
+        f"이 값은 극단적으로 나쁜 경로와 좋은 경로를 제거한 보조 판단값입니다."
+    )
 
 
+# -----------------------------------------------------------
+# 근거·가정 표시
+# -----------------------------------------------------------
 def render_data_assumption_section():
     with st.expander("📌 업로드 자료 기반 수익률·변동성 산출값", expanded=False):
         df = pd.DataFrame(DATA_ANALYSIS_SUMMARY)
@@ -163,12 +263,18 @@ def render_data_assumption_section():
         )
         st.caption(
             "국내퀀트 7월말-11월말 단기채 구간은 별도 국내 단기채 월별 자료가 없어 0%로 두었습니다. "
-            "V62-7 기본 엔진은 계좌별 원자료를 직접 합성하지 않고 후보1 수익률 가정의 검토 근거로만 사용합니다."
+            "V62-8 기본 엔진은 계좌별 원자료를 직접 합성하지 않고 후보1 수익률 가정의 검토 근거로만 사용합니다."
         )
 
 
+# -----------------------------------------------------------
+# 자산 궤적
+# -----------------------------------------------------------
 def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df):
-    st.markdown(f"##### 📈 현재가치 자산 궤적 ({tgt_retire}세 은퇴 기준)")
+    _render_section_header(
+        f"현재가치 자산 궤적 · {tgt_retire}세 은퇴 기준",
+        "중앙값은 일반 경로, 하위 10%는 불리한 장기 경로입니다. 주택구입 같은 큰 목돈 지출은 세로선으로 표시됩니다.",
+    )
 
     median_pv = np.median(sim_assets_pv, axis=0) / 100000000
     top_10_pv = np.percentile(sim_assets_pv, 90, axis=0) / 100000000
@@ -180,7 +286,7 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
             x=years + years[::-1],
             y=np.concatenate([top_10_pv, bottom_10_pv[::-1]]),
             fill="toself",
-            fillcolor="rgba(46, 134, 193, 0.14)",
+            fillcolor="rgba(37, 99, 235, 0.13)",
             line=dict(color="rgba(255,255,255,0)"),
             name="10-90% 범위",
             hoverinfo="skip",
@@ -190,7 +296,7 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
         go.Scatter(
             x=years,
             y=median_pv,
-            line=dict(color="#2563eb", width=3),
+            line=dict(color="#1d4ed8", width=3.5),
             name="중앙값",
             hovertemplate="%{y:.2f}억 원<extra></extra>",
         )
@@ -199,19 +305,19 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
         go.Scatter(
             x=years,
             y=bottom_10_pv,
-            line=dict(color="#dc2626", width=2, dash="dot"),
+            line=dict(color="#dc2626", width=2.4, dash="dot"),
             name="하위 10%",
             hovertemplate="%{y:.2f}억 원<extra></extra>",
         )
     )
 
-    fig.add_hline(y=0, line_dash="solid", line_color="#333333", line_width=1)
+    fig.add_hline(y=0, line_dash="solid", line_color="#334155", line_width=1)
 
     if tgt_retire in years:
         fig.add_vline(
             x=tgt_retire,
             line_dash="dash",
-            line_color="#64748b",
+            line_color="#475569",
             annotation_text="은퇴",
         )
 
@@ -220,28 +326,26 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
             fig.add_vline(
                 x=row["나이"],
                 line_dash="dot",
-                line_color="#f59e0b",
+                line_color="#d97706",
                 annotation_text=row["내용"],
             )
 
     fig.update_layout(
         xaxis_title="나이",
         yaxis_title="현재가치 자산 (억 원)",
-        height=500,
-        plot_bgcolor="rgba(252, 252, 252, 1)",
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=40, l=10, r=10, b=20),
     )
+    _styled_plotly_layout(fig, height=520)
 
     with st.container(border=True):
         st.plotly_chart(fig, use_container_width=True)
-        st.caption(
-            "중앙값은 일반적인 경로, 하위 10%는 불리한 장기 경로입니다. "
-            "그래프의 모든 금액은 현재가치 기준입니다."
-        )
+        st.caption("그래프의 모든 금액은 현시점 구매력 기준입니다.")
 
 
+# -----------------------------------------------------------
+# 진단 섹션
+# -----------------------------------------------------------
 def render_failure_diagnostics_section(res):
     with st.expander("🔍 결과 원인 분해 패널", expanded=True):
         diag = build_failure_diagnostics(res, res["retire_age"])
@@ -268,27 +372,35 @@ def render_return_distribution_diagnostics_section(res):
         )
 
 
+# -----------------------------------------------------------
+# 현실 리스크
+# -----------------------------------------------------------
 def render_real_life_risk_section(res):
     risk_df = build_real_life_risk_table(res)
 
-    st.markdown("##### 🧭 현실 리스크 3대 지표")
-    st.caption(
-        "파산확률만으로 보이지 않는 체감 리스크입니다. 지표 수를 세 가지로 줄여 해석력을 높였습니다."
+    _render_section_header(
+        "현실 리스크 3대 지표",
+        "파산확률만으로 보이지 않는 체감 리스크입니다. 은퇴 후 낙폭, 은퇴 직후 10년 시퀀스, 반토막 경험률을 분리해 봅니다.",
     )
 
     cols = st.columns(3)
     for col, (_, row) in zip(cols, risk_df.iterrows()):
         with col:
-            with st.container(border=True):
-                st.metric(
-                    row["지표"],
-                    row["값"],
-                    row["기준"],
-                    delta_color=_risk_card_color(row["값"]),
-                )
-                st.caption(row["해석"])
+            value_text = str(row["값"])
+            tone = "success" if _risk_card_color(value_text) == "normal" else "warning"
+            if _risk_card_color(value_text) == "inverse":
+                tone = "danger"
+            _render_kpi_card(
+                row["지표"],
+                row["값"],
+                f"{row['기준']} · {row['해석']}",
+                tone,
+            )
 
 
+# -----------------------------------------------------------
+# 시나리오·민감도·스트레스
+# -----------------------------------------------------------
 def render_scenario_comparison_section(res):
     scenario_df = res.get("scenario_comparison_df")
     if scenario_df is None or scenario_df.empty:
@@ -299,6 +411,34 @@ def render_scenario_comparison_section(res):
             "긍정적·보통·보수 수익률 시나리오를 같은 입력값 기준으로 비교합니다. "
             "현재 선택된 시나리오에는 * 표시가 붙습니다."
         )
+
+        display_cols = st.columns(3)
+        best_ruin_row = scenario_df.loc[scenario_df["파산확률"].idxmin()]
+        best_extra_row = scenario_df.loc[scenario_df["안전 여유자금(만원/월)"].idxmax()]
+        conservative_row = scenario_df.iloc[-1]
+
+        with display_cols[0]:
+            _render_kpi_card(
+                "최저 파산확률 시나리오",
+                f"{best_ruin_row['파산확률']:.1f}%",
+                str(best_ruin_row["수익률 시나리오"]).replace(" *", ""),
+                _metric_tone_from_pct(float(best_ruin_row["파산확률"])),
+            )
+        with display_cols[1]:
+            _render_kpi_card(
+                "최대 안전 여유자금",
+                _fmt_manwon(best_extra_row["안전 여유자금(만원/월)"]),
+                str(best_extra_row["수익률 시나리오"]).replace(" *", ""),
+                "accent",
+            )
+        with display_cols[2]:
+            _render_kpi_card(
+                "보수 시나리오 파산확률",
+                f"{conservative_row['파산확률']:.1f}%",
+                str(conservative_row["수익률 시나리오"]).replace(" *", ""),
+                _metric_tone_from_pct(float(conservative_row["파산확률"])),
+            )
+
         st.dataframe(
             scenario_df,
             use_container_width=True,
@@ -337,23 +477,23 @@ def render_sensitivity_section(res):
         )
 
         sorted_df = sensitivity_df.sort_values(by="기준 대비 변화(%p)", key=abs, ascending=True)
+        bar_colors = ["#dc2626" if v > 0 else "#2563eb" for v in sorted_df["기준 대비 변화(%p)"]]
         fig = go.Figure(
             go.Bar(
                 x=sorted_df["기준 대비 변화(%p)"],
                 y=sorted_df["민감도 항목"],
                 orientation="h",
+                marker_color=bar_colors,
                 text=[f"{v:+.1f}%p" for v in sorted_df["기준 대비 변화(%p)"]],
                 textposition="auto",
             )
         )
-        fig.add_vline(x=0, line_width=1, line_color="#333333")
+        fig.add_vline(x=0, line_width=1, line_color="#334155")
         fig.update_layout(
             title="기준 대비 파산확률 변화",
             xaxis_title="파산확률 변화(%p)",
-            height=360,
-            plot_bgcolor="rgba(252, 252, 252, 1)",
-            margin=dict(l=20, r=20, t=40, b=20),
         )
+        _styled_plotly_layout(fig, height=380, title="기준 대비 파산확률 변화")
         st.plotly_chart(fig, use_container_width=True)
 
 
@@ -361,8 +501,8 @@ def render_stress_budget_section(stress_df, target_ruin):
     with st.expander("💸 월 추가 사용액별 파산확률", expanded=False):
         colors = [
             "#16a34a" if val <= STANDARD_TARGET_RUIN_PROB
-            else "#f59e0b" if val <= DWZ_TARGET_RUIN_PROB
-            else "#ef4444" if val >= WARNING_RUIN_PROB
+            else "#d97706" if val <= DWZ_TARGET_RUIN_PROB
+            else "#dc2626" if val >= WARNING_RUIN_PROB
             else "#facc15"
             for val in stress_df["파산 확률(%)"]
         ]
@@ -380,35 +520,36 @@ def render_stress_budget_section(stress_df, target_ruin):
         )
 
         fig_stress.update_layout(
-            title="<b>추가 사용액별 파산확률</b>",
+            title="추가 사용액별 파산확률",
             yaxis_title="파산확률 (%)",
-            height=300,
-            plot_bgcolor="rgba(252, 252, 252, 1)",
-            margin=dict(l=20, r=20, t=40, b=20),
         )
         fig_stress.add_hline(
             y=STANDARD_TARGET_RUIN_PROB,
             line_dash="dot",
-            line_color="green",
+            line_color="#16a34a",
             annotation_text=f"안전 {STANDARD_TARGET_RUIN_PROB:.0f}%",
         )
         fig_stress.add_hline(
             y=target_ruin,
             line_dash="dot",
-            line_color="orange",
+            line_color="#d97706",
             annotation_text=f"DWZ {target_ruin:.0f}%",
         )
         fig_stress.add_hline(
             y=WARNING_RUIN_PROB,
             line_dash="dot",
-            line_color="red",
+            line_color="#dc2626",
             annotation_text=f"위험 {WARNING_RUIN_PROB:.0f}%",
         )
+        _styled_plotly_layout(fig_stress, height=330, title="추가 사용액별 파산확률")
 
         st.plotly_chart(fig_stress, use_container_width=True)
         st.caption("추가 사용 가능액은 DWZ 방어선 기준으로 역산합니다. 모든 금액은 현재가치 기준입니다.")
 
 
+# -----------------------------------------------------------
+# 자동 적용 모델
+# -----------------------------------------------------------
 def render_applied_model_section(res):
     defense_rate = res["defense_rate"]
     return_assumption_info = res.get("return_assumption_info", {}) or {}
@@ -521,6 +662,10 @@ def render_applied_model_section(res):
     with st.expander("🧩 자동 적용 모델과 해석", expanded=True):
         st.dataframe(model_df, use_container_width=True, hide_index=True)
 
+
+# -----------------------------------------------------------
+# 고급 분석
+# -----------------------------------------------------------
 def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire):
     final_assets = sim_assets_pv[:, -1]
 
@@ -534,8 +679,8 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
         "하위 10%": {"ret": sim_returns[bot10_idx, :], "pv": sim_assets_pv[bot10_idx, :]},
     }
 
-    with st.expander("📊 고급 분석: 대표 경로 3종 비교", expanded=False):
-        st.caption("기본 화면은 파산확률, 자산 궤적, 현실 리스크 3대 지표 중심으로 정리했습니다.")
+    with st.expander("📊 고급 분석: 대표 경로 3종 비교", expanded=True):
+        st.caption("상위 10%, 중앙값, 하위 10%에 가까운 실제 경로를 골라 연도별 수익률과 자산 흐름을 비교합니다.")
 
         c_m1, c_m2, c_m3 = st.columns(3)
         cols = [c_m1, c_m2, c_m3]
@@ -550,12 +695,14 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
             cagr = (np.prod(1 + ret_array) ** (1 / len(years)) - 1) * 100
             tgt_pv_eok = pv_array[target_age_idx] / 100000000
 
-            cols[i].metric(
-                label,
-                f"{tgt_retire}세 {tgt_pv_eok:.1f}억 원",
-                f"CAGR {cagr:.2f}%",
-                delta_color="off",
-            )
+            with cols[i]:
+                tone = "success" if label == "상위 10%" else "accent" if label == "중앙값" else "warning"
+                _render_kpi_card(
+                    label,
+                    f"{tgt_retire}세 {tgt_pv_eok:.1f}억",
+                    f"전체기간 CAGR {cagr:.2f}%",
+                    tone,
+                )
 
             comp_data[f"[{label}] 수익률(%)"] = np.round(ret_array * 100, 2)
             comp_data[f"[{label}] 자산(억)"] = np.round(pv_array / 100000000, 2)
@@ -572,6 +719,9 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
             st.line_chart(comp_df[[c for c in comp_df.columns if "자산" in c]], height=300)
 
 
+# -----------------------------------------------------------
+# 결과 페이지 조립
+# -----------------------------------------------------------
 def render_results_page(res):
     years = res["years"]
     sim_assets_pv = res["pv"]
@@ -582,18 +732,27 @@ def render_results_page(res):
     tgt_retire = res["retire_age"]
 
     render_top_summary_section(res)
-    render_data_assumption_section()
-    st.markdown("---")
 
-    render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df)
-    st.markdown("---")
+    summary_tab, risk_tab, scenario_tab, model_tab, advanced_tab = st.tabs(
+        ["핵심 요약", "리스크 진단", "시나리오·민감도", "가정·모델", "고급 분석"]
+    )
 
-    render_failure_diagnostics_section(res)
-    render_return_distribution_diagnostics_section(res)
-    render_real_life_risk_section(res)
-    render_scenario_comparison_section(res)
-    render_sensitivity_section(res)
-    render_stress_budget_section(stress_df, target_ruin)
-    render_applied_model_section(res)
+    with summary_tab:
+        render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df)
+        render_real_life_risk_section(res)
+        render_stress_budget_section(stress_df, target_ruin)
 
-    render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire)
+    with risk_tab:
+        render_failure_diagnostics_section(res)
+        render_return_distribution_diagnostics_section(res)
+
+    with scenario_tab:
+        render_scenario_comparison_section(res)
+        render_sensitivity_section(res)
+
+    with model_tab:
+        render_data_assumption_section()
+        render_applied_model_section(res)
+
+    with advanced_tab:
+        render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire)

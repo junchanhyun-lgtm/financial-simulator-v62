@@ -5,7 +5,7 @@ PAGE_TITLE = "My Quant Asset Sim (V62-8)"
 MAIN_TITLE = "💰 전담 퀀트 금융자산 종합 관리 시스템 (V62-8)"
 
 UPDATE_MESSAGE = (
-    "💡 V62-8 업데이트: 수익률 시나리오를 긍정·보통·보수 3단계로 정리하고, 후보1 국내퀀트 8개월 운용규모 페널티를 현실화"
+    "💡 V62-8 업데이트: 수익률 시나리오 3단계, 은퇴 전 변동성 21.0%, 후보1 국내퀀트 8개월 운용규모 페널티를 적용"
 )
 
 N_SIMULATIONS = 5000
@@ -72,11 +72,11 @@ TRIMMED_AVERAGE_FINAL_ASSET_FLOOR_MANWON = 10000
 # 후보1 알파 감소 모델
 # 전략명: 국내퀀트 11월말-7월말 + VOO 7월말-11월말
 # 분석기간: 2006년 11월말-2024년 11월말, 2024년 12월-2026년 4월 제외
-# 변동성은 코스피200 8개월 + S&P500 4개월 패시브 계절 포트폴리오 17.4%를 기준으로 약간 상향한 18.5%를 사용합니다.
+# 변동성은 국내퀀트 합성 원자료의 월수익률 연환산 변동성 21.0%를 사용합니다.
 ALPHA_MODEL_NAME = "후보1 국내퀀트 11-7 + VOO 7-11"
 ALPHA_MODEL_BASE_CAGR = 0.3077
-ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY = 0.1740
-ALPHA_MODEL_BASE_VOLATILITY = 0.1850
+ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY = 0.2100
+ALPHA_MODEL_BASE_VOLATILITY = 0.2100
 ALPHA_MODEL_BASE_MDD = -0.2227
 
 ALPHA_MODEL_DISCOUNT_OPTIONS = {
