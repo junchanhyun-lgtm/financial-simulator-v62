@@ -45,26 +45,6 @@ def _drop_model_columns_for_editor(df):
     return df.drop(columns=["물가연동"], errors="ignore")
 
 
-def _with_delete_column(df):
-    """이벤트 편집표에 명시적인 삭제 체크 컬럼을 추가합니다."""
-    editor_df = df.copy().reset_index(drop=True)
-    if "삭제" not in editor_df.columns:
-        editor_df.insert(0, "삭제", False)
-    editor_df["삭제"] = editor_df["삭제"].fillna(False).astype(bool)
-    return editor_df
-
-
-def _finalize_event_editor_df(df, required_columns):
-    """삭제 체크 행과 미완성 행을 제거하고 세션 상태에 저장할 표를 반환합니다."""
-    clean_df = df.copy()
-    if "삭제" in clean_df.columns:
-        delete_mask = clean_df["삭제"].fillna(False).astype(bool)
-        clean_df = clean_df.loc[~delete_mask].drop(columns=["삭제"], errors="ignore")
-
-    clean_df = clean_df.dropna(subset=required_columns)
-    return clean_df.reset_index(drop=True)
-
-
 def _build_discount_scenario_table(stock_weight, cash_weight):
     rows = []
     for label, discount_rate in ALPHA_MODEL_DISCOUNT_OPTIONS.items():
@@ -123,7 +103,7 @@ def render_applied_model_preview():
                     "의미": "추가 사용 가능액은 DWZ 기준으로 계산하고, 결과에는 안전·경고선을 함께 표시합니다.",
                 },
             ],
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
         )
 
@@ -213,12 +193,14 @@ def render_input_panel():
             )
 
             discount_labels = list(ALPHA_MODEL_DISCOUNT_OPTIONS.keys())
+            custom_return_label = "직접 입력"
+            return_input_options = discount_labels + [custom_return_label]
             default_discount_index = discount_labels.index(ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL)
             selected_discount_label = st.selectbox(
-                "수익률",
-                discount_labels,
+                "수익률·변동성 입력 방식",
+                return_input_options,
                 index=default_discount_index,
-                help="후보1 전략의 백테스트 CAGR에 현실화 할인율을 적용합니다.",
+                help="기본 시나리오를 선택하거나, 은퇴 전후 수익률과 변동성을 직접 입력합니다.",
             )
 
             allocation_labels = list(ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS.keys())
@@ -229,27 +211,100 @@ def render_input_panel():
                 "은퇴 후 자산배분",
                 allocation_labels,
                 index=default_allocation_index,
-                help="은퇴 후에는 주식전략과 현금성 자산을 섞어 수익률과 변동성을 계산합니다.",
+                help="자동 시나리오에서는 은퇴 후 수익률과 변동성 계산에 사용합니다. 직접 입력 방식에서는 참고 정보로 저장됩니다.",
             )
 
-            selected_discount = ALPHA_MODEL_DISCOUNT_OPTIONS[selected_discount_label]
             allocation = ALPHA_MODEL_RETIREMENT_ALLOCATION_OPTIONS[selected_allocation_label]
             stock_weight = float(allocation["stock_weight"])
             cash_weight = float(allocation["cash_weight"])
 
-            adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - selected_discount)
-            expected_return_pre = adjusted_cagr * 100.0
-            expected_return_post = (
-                (adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
+            is_custom_return = selected_discount_label == custom_return_label
+            reference_discount = ALPHA_MODEL_DISCOUNT_OPTIONS.get(
+                selected_discount_label,
+                ALPHA_MODEL_DISCOUNT_OPTIONS[ALPHA_MODEL_DEFAULT_DISCOUNT_LABEL],
+            )
+            reference_adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - reference_discount)
+            reference_return_pre = reference_adjusted_cagr * 100.0
+            reference_return_post = (
+                (reference_adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
             ) * 100.0
-            vol_pre = ALPHA_MODEL_BASE_VOLATILITY * 100.0
-            vol_post = ALPHA_MODEL_BASE_VOLATILITY * stock_weight * 100.0
+            reference_vol_pre = ALPHA_MODEL_BASE_VOLATILITY * 100.0
+            reference_vol_post = ALPHA_MODEL_BASE_VOLATILITY * stock_weight * 100.0
+
+            if is_custom_return:
+                st.caption(
+                    "직접 입력값은 메인 시뮬레이션, 원인분해, 민감도 분석에 그대로 반영됩니다. "
+                    "아래 기준 시나리오 표는 참고용입니다."
+                )
+                manual_c1, manual_c2 = st.columns(2)
+                expected_return_pre = manual_c1.number_input(
+                    "은퇴 전 기대수익률(연%)",
+                    min_value=-50.0,
+                    max_value=80.0,
+                    value=float(reference_return_pre),
+                    step=0.1,
+                    format="%.2f",
+                    key="in_manual_ret_pre",
+                    help="은퇴 전 구간에 적용할 연 기대수익률입니다.",
+                )
+                vol_pre = manual_c2.number_input(
+                    "은퇴 전 변동성(연%)",
+                    min_value=0.0,
+                    max_value=80.0,
+                    value=float(reference_vol_pre),
+                    step=0.1,
+                    format="%.2f",
+                    key="in_manual_vol_pre",
+                    help="은퇴 전 구간에 적용할 연 변동성입니다.",
+                )
+                manual_c3, manual_c4 = st.columns(2)
+                expected_return_post = manual_c3.number_input(
+                    "은퇴 후 기대수익률(연%)",
+                    min_value=-50.0,
+                    max_value=80.0,
+                    value=float(reference_return_post),
+                    step=0.1,
+                    format="%.2f",
+                    key="in_manual_ret_post",
+                    help="은퇴 후 구간에 적용할 연 기대수익률입니다.",
+                )
+                vol_post = manual_c4.number_input(
+                    "은퇴 후 변동성(연%)",
+                    min_value=0.0,
+                    max_value=80.0,
+                    value=float(reference_vol_post),
+                    step=0.1,
+                    format="%.2f",
+                    key="in_manual_vol_post",
+                    help="은퇴 후 구간에 적용할 연 변동성입니다.",
+                )
+                selected_discount = 0.0
+                model_name_for_info = "직접 입력 수익률·변동성"
+                model_description = (
+                    "사용자가 직접 입력한 은퇴 전후 기대수익률과 변동성을 사용합니다. "
+                    "은퇴 후 자산배분 선택값은 결과 설명과 참고 정보로만 저장됩니다."
+                )
+            else:
+                selected_discount = ALPHA_MODEL_DISCOUNT_OPTIONS[selected_discount_label]
+                adjusted_cagr = ALPHA_MODEL_BASE_CAGR * (1.0 - selected_discount)
+                expected_return_pre = adjusted_cagr * 100.0
+                expected_return_post = (
+                    (adjusted_cagr * stock_weight) + (ALPHA_MODEL_CASH_RETURN * cash_weight)
+                ) * 100.0
+                vol_pre = ALPHA_MODEL_BASE_VOLATILITY * 100.0
+                vol_post = ALPHA_MODEL_BASE_VOLATILITY * stock_weight * 100.0
+                model_name_for_info = ALPHA_MODEL_NAME
+                model_description = (
+                    "후보1 알파 감소 모델입니다. 은퇴 전은 긍정·보통·보수 수익률 시나리오와 "
+                    "18.5% 변동성을 쓰고, 은퇴 후는 선택한 주식 현금 배분으로 수익률과 변동성을 계산합니다."
+                )
+
             reference_mdd_pre = ALPHA_MODEL_BASE_MDD * 100.0
             reference_mdd_post = ALPHA_MODEL_BASE_MDD * stock_weight * 100.0
 
             st.dataframe(
                 _build_discount_scenario_table(stock_weight, cash_weight),
-                width="stretch",
+                use_container_width=True,
                 hide_index=True,
                 column_config={
                     "은퇴 전 수익률": st.column_config.NumberColumn(format="%.2f%%"),
@@ -260,18 +315,24 @@ def render_input_panel():
             )
 
             with st.expander("⚙️ 적용 기준", expanded=False):
-                st.caption(
-                    f"은퇴 전 변동성은 국내퀀트 합성 원자료의 월수익률 연환산 변동성 {ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY * 100:.1f}%를 기준으로 {vol_pre:.1f}%로 설정했습니다."
-                )
-                st.caption(
-                    f"은퇴 후 수익률은 주식전략 {stock_weight * 100:.0f}%와 현금 {cash_weight * 100:.0f}%를 섞어 계산합니다. 현금수익률은 명목 {ALPHA_MODEL_CASH_RETURN * 100:.1f}%로 둡니다."
-                )
-                st.caption(
-                    f"은퇴 후 변동성은 현금 변동성을 0%로 보고 {vol_pre:.1f}% × {stock_weight:.1f} = {vol_post:.1f}%로 계산합니다."
-                )
+                if is_custom_return:
+                    st.caption(
+                        "직접 입력 방식에서는 위 4개 값이 그대로 시뮬레이션에 들어갑니다. "
+                        "후보1 알파 감소 모델의 자동 계산값은 덮어씁니다."
+                    )
+                else:
+                    st.caption(
+                        f"은퇴 전 변동성은 코스피200 8개월과 S&P500 4개월 패시브 계절 포트폴리오의 약 {ALPHA_MODEL_PASSIVE_SEASONAL_VOLATILITY * 100:.1f}%를 기준으로, 전략 현실성을 감안해 {vol_pre:.1f}%로 설정했습니다."
+                    )
+                    st.caption(
+                        f"은퇴 후 수익률은 주식전략 {stock_weight * 100:.0f}%와 현금 {cash_weight * 100:.0f}%를 섞어 계산합니다. 현금수익률은 명목 {ALPHA_MODEL_CASH_RETURN * 100:.1f}%로 둡니다."
+                    )
+                    st.caption(
+                        f"은퇴 후 변동성은 현금 변동성을 0%로 보고 {vol_pre:.1f}% × {stock_weight:.1f} = {vol_post:.1f}%로 계산합니다."
+                    )
 
             return_assumption_info = {
-                "모델": ALPHA_MODEL_NAME,
+                "모델": model_name_for_info,
                 "선택": selected_discount_label,
                 "은퇴 후 자산배분": selected_allocation_label,
                 "기준 CAGR": ALPHA_MODEL_BASE_CAGR * 100.0,
@@ -285,7 +346,7 @@ def render_input_panel():
                 "은퇴 후 변동성": vol_post,
                 "참고 MDD": reference_mdd_pre,
                 "은퇴 후 참고 MDD": reference_mdd_post,
-                "설명": "후보1 알파 감소 모델입니다. 은퇴 전은 긍정·보통·보수 수익률 시나리오와 18.5% 변동성을 쓰고, 은퇴 후는 선택한 주식 현금 배분으로 수익률과 변동성을 계산합니다.",
+                "설명": model_description,
             }
 
             st.info(
@@ -293,7 +354,7 @@ def render_input_panel():
                 f"은퇴 후 **{expected_return_post:.2f}% / 변동성 {vol_post:.2f}%**"
             )
             st.caption(
-                f"은퇴 후 자산배분: {selected_allocation_label} · "
+                f"입력 방식: {selected_discount_label} · 은퇴 후 자산배분: {selected_allocation_label} · "
                 f"참고 MDD: 은퇴 전 {reference_mdd_pre:.2f}% / 은퇴 후 {reference_mdd_post:.2f}%"
             )
             st.caption(
@@ -329,31 +390,18 @@ def render_input_panel():
         if "lump_df" not in st.session_state:
             st.session_state.lump_df = get_default_lump_events()
 
-        st.caption(
-            "행 삭제는 왼쪽 행 선택 후 Delete 키를 누르거나, `삭제` 체크박스를 선택하면 됩니다."
-        )
         edited_lump_df = st.data_editor(
-            _with_delete_column(st.session_state.lump_df),
+            st.session_state.lump_df,
             num_rows="dynamic",
-            width="stretch",
-            key="lump_event_editor",
-            column_order=["삭제", "나이", "유형", "내용", "금액(만원)"],
+            use_container_width=True,
             column_config={
-                "삭제": st.column_config.CheckboxColumn(
-                    "삭제",
-                    help="체크한 행은 시뮬레이션 입력에서 제외됩니다.",
-                ),
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
                     options=["수입", "지출"],
-                ),
+                )
             },
         )
-        clean_lump_df = _finalize_event_editor_df(
-            edited_lump_df,
-            required_columns=["나이", "유형", "금액(만원)"],
-        )
-        st.session_state.lump_df = clean_lump_df
+        clean_lump_df = edited_lump_df.dropna(subset=["나이", "유형", "금액(만원)"])
 
     with tab2:
         if "recur_df" not in st.session_state:
@@ -361,28 +409,11 @@ def render_input_panel():
                 get_default_recurring_events()
             )
 
-        st.caption(
-            "행 삭제는 왼쪽 행 선택 후 Delete 키를 누르거나, `삭제` 체크박스를 선택하면 됩니다."
-        )
         edited_recur_df = st.data_editor(
-            _with_delete_column(st.session_state.recur_df),
+            st.session_state.recur_df,
             num_rows="dynamic",
-            width="stretch",
-            key="recurring_event_editor",
-            column_order=[
-                "삭제",
-                "시작나이",
-                "기간(년)",
-                "유형",
-                "내용",
-                "월금액(만원)",
-                "확정연금",
-            ],
+            use_container_width=True,
             column_config={
-                "삭제": st.column_config.CheckboxColumn(
-                    "삭제",
-                    help="체크한 행은 시뮬레이션 입력에서 제외됩니다.",
-                ),
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
                     options=["수입", "지출"],
@@ -393,11 +424,9 @@ def render_input_panel():
                 ),
             },
         )
-        clean_recur_df = _finalize_event_editor_df(
-            edited_recur_df,
-            required_columns=["시작나이", "기간(년)", "유형", "월금액(만원)"],
+        clean_recur_df = edited_recur_df.dropna(
+            subset=["시작나이", "기간(년)", "유형", "월금액(만원)"]
         )
-        st.session_state.recur_df = clean_recur_df
 
     return {
         "current_age": current_age,
