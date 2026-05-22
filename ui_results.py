@@ -157,6 +157,113 @@ def _styled_plotly_layout(fig, height=460, title=None):
     return fig
 
 
+
+def _pct_text_to_float(value_text):
+    try:
+        return float(str(value_text).replace("%", "").strip())
+    except (TypeError, ValueError):
+        return np.nan
+
+
+def _normalize_series(values):
+    arr = pd.to_numeric(pd.Series(values), errors="coerce").astype(float)
+    if arr.empty or arr.isna().all():
+        return pd.Series(np.full(len(arr), 50.0), index=arr.index)
+    min_val = arr.min()
+    max_val = arr.max()
+    if np.isclose(max_val, min_val):
+        return pd.Series(np.full(len(arr), 50.0), index=arr.index)
+    return ((arr - min_val) / (max_val - min_val) * 100.0).clip(0.0, 100.0)
+
+
+def _decision_grade(base_ruin, half_asset_rate=None):
+    half_asset_rate = 0.0 if half_asset_rate is None or pd.isna(half_asset_rate) else float(half_asset_rate)
+    if base_ruin <= STANDARD_TARGET_RUIN_PROB and half_asset_rate < 25.0:
+        return "매우 안정"
+    if base_ruin <= STANDARD_TARGET_RUIN_PROB:
+        return "안정"
+    if base_ruin <= DWZ_TARGET_RUIN_PROB:
+        return "DWZ 허용"
+    if base_ruin < WARNING_RUIN_PROB:
+        return "주의"
+    return "위험"
+
+
+def _decision_tone_from_grade(grade):
+    if grade in ("매우 안정", "안정"):
+        return "success"
+    if grade in ("DWZ 허용", "주의"):
+        return "warning"
+    return "danger"
+
+
+def _top_sensitivity_driver(res):
+    sensitivity_df = res.get("sensitivity_df")
+    if sensitivity_df is None or sensitivity_df.empty or "기준 대비 변화(%p)" not in sensitivity_df.columns:
+        return "민감도 결과 없음"
+
+    df = sensitivity_df.copy()
+    df["기준 대비 변화(%p)"] = pd.to_numeric(df["기준 대비 변화(%p)"], errors="coerce")
+    df = df.dropna(subset=["기준 대비 변화(%p)"])
+    if df.empty:
+        return "민감도 결과 없음"
+
+    harmful = df[df["기준 대비 변화(%p)"] > 0].sort_values("기준 대비 변화(%p)", ascending=False)
+    if harmful.empty:
+        row = df.iloc[df["기준 대비 변화(%p)"].abs().argmax()]
+    else:
+        row = harmful.iloc[0]
+
+    return f"{row['민감도 항목']} ({row['기준 대비 변화(%p)']:+.1f}%p)"
+
+
+def _primary_risk_driver(res):
+    risk_df = build_real_life_risk_table(res)
+    if risk_df is None or risk_df.empty:
+        return "현실 리스크 결과 없음"
+
+    def score_row(row):
+        value = _pct_text_to_float(row.get("값", ""))
+        if pd.isna(value):
+            return -1.0
+        label = str(row.get("지표", ""))
+        if "반토막" in label:
+            return value * 1.15
+        if "시퀀스" in label:
+            return value * 1.05
+        return value
+
+    scored = risk_df.copy()
+    scored["_score"] = scored.apply(score_row, axis=1)
+    row = scored.sort_values("_score", ascending=False).iloc[0]
+    return f"{row['지표']} {row['값']}"
+
+
+def _add_scenario_stability_columns(scenario_df):
+    df = scenario_df.copy()
+    if df.empty:
+        return df
+
+    ruin = pd.to_numeric(df.get("파산확률"), errors="coerce").fillna(100.0)
+    half = pd.to_numeric(df.get("은퇴 후 반토막 경험률"), errors="coerce").fillna(100.0)
+    retire_p10 = pd.to_numeric(df.get("은퇴시점 하위10%(억)"), errors="coerce").fillna(0.0)
+    final_median = pd.to_numeric(df.get("최종 중앙값(억)"), errors="coerce").fillna(0.0)
+
+    ruin_component = (100.0 - ruin * 4.0).clip(0.0, 100.0) * 0.45
+    half_component = (100.0 - half * 1.8).clip(0.0, 100.0) * 0.25
+    retire_component = _normalize_series(retire_p10) * 0.20
+    final_component = _normalize_series(final_median) * 0.10
+
+    score = (ruin_component + half_component + retire_component + final_component).round(1)
+    df.insert(1, "종합판정", [
+        _decision_grade(r, h) for r, h in zip(ruin, half)
+    ])
+    df.insert(2, "안정성 점수", score)
+    df.insert(3, "추천순위", score.rank(method="min", ascending=False).astype(int))
+
+    return df.sort_values(["추천순위", "파산확률"], ascending=[True, True])
+
+
 # -----------------------------------------------------------
 # 결과 상단 핵심 요약
 # -----------------------------------------------------------
@@ -201,6 +308,58 @@ def render_top_summary_section(res):
             </div>
             <div class="result-hero-subtitle">
                 {status_sentence} 판단 기준: {threshold_text}. DWZ 기준 추가사용 가능액은 월 {_fmt_manwon(safe_extra)}입니다.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    return_assumption_info = res.get("return_assumption_info", {}) or {}
+    selected_scenario = return_assumption_info.get("선택", "현재 선택 시나리오")
+    selected_allocation = return_assumption_info.get("은퇴 후 자산배분", "현재 선택 배분")
+    risk_df_for_decision = build_real_life_risk_table(res)
+    half_asset_row = risk_df_for_decision[
+        risk_df_for_decision["지표"].astype(str).str.contains("반토막", na=False)
+    ]
+    half_asset_rate = (
+        _pct_text_to_float(half_asset_row.iloc[0]["값"])
+        if not half_asset_row.empty
+        else np.nan
+    )
+    decision_grade = _decision_grade(base_ruin, half_asset_rate)
+    decision_tone = _decision_tone_from_grade(decision_grade)
+    spending_guideline = (
+        f"월 {_fmt_manwon(safe_extra)} 이하"
+        if safe_extra > 0
+        else "추가소비 보류"
+    )
+    sensitivity_driver = _top_sensitivity_driver(res)
+    risk_driver = _primary_risk_driver(res)
+
+    st.markdown(
+        f"""
+        <div class="decision-panel decision-{decision_tone}">
+            <div class="decision-main">
+                <div class="decision-label">최종 판단</div>
+                <div class="decision-title">{_escape(decision_grade)}</div>
+                <div class="decision-text">
+                    현재 설정은 {_escape(selected_scenario)} / {_escape(selected_allocation)}입니다.
+                    월 추가소비 가이드라인은 <b>{_escape(spending_guideline)}</b>로 보되, 민감도와 현실 리스크를 함께 확인하십시오.
+                </div>
+            </div>
+            <div class="decision-grid">
+                <div class="decision-item">
+                    <div class="decision-item-label">권장 월 추가소비</div>
+                    <div class="decision-item-value">{_escape(spending_guideline)}</div>
+                </div>
+                <div class="decision-item">
+                    <div class="decision-item-label">가장 민감한 변수</div>
+                    <div class="decision-item-value small">{_escape(sensitivity_driver)}</div>
+                </div>
+                <div class="decision-item">
+                    <div class="decision-item-label">핵심 체감 리스크</div>
+                    <div class="decision-item-value small">{_escape(risk_driver)}</div>
+                </div>
             </div>
         </div>
         """,
@@ -412,10 +571,19 @@ def render_scenario_comparison_section(res):
             "현재 선택된 시나리오에는 * 표시가 붙습니다."
         )
 
+        display_df = _add_scenario_stability_columns(scenario_df)
+
         display_cols = st.columns(3)
-        best_ruin_row = scenario_df.loc[scenario_df["파산확률"].idxmin()]
-        best_extra_row = scenario_df.loc[scenario_df["안전 여유자금(만원/월)"].idxmax()]
-        conservative_row = scenario_df.iloc[-1]
+        best_ruin_row = display_df.loc[display_df["파산확률"].idxmin()]
+        best_extra_row = display_df.loc[display_df["안전 여유자금(만원/월)"].idxmax()]
+        conservative_candidates = display_df[
+            display_df["수익률 시나리오"].astype(str).str.contains("보수", na=False)
+        ]
+        conservative_row = (
+            conservative_candidates.iloc[0]
+            if not conservative_candidates.empty
+            else display_df.iloc[-1]
+        )
 
         with display_cols[0]:
             _render_kpi_card(
@@ -440,10 +608,12 @@ def render_scenario_comparison_section(res):
             )
 
         st.dataframe(
-            scenario_df,
+            display_df,
             use_container_width=True,
             hide_index=True,
             column_config={
+                "안정성 점수": st.column_config.NumberColumn(format="%.1f"),
+                "추천순위": st.column_config.NumberColumn(format="%d"),
                 "은퇴 전 수익률": st.column_config.NumberColumn(format="%.2f%%"),
                 "은퇴 후 수익률": st.column_config.NumberColumn(format="%.2f%%"),
                 "은퇴 전 변동성": st.column_config.NumberColumn(format="%.2f%%"),
@@ -454,6 +624,10 @@ def render_scenario_comparison_section(res):
                 "최종 중앙값(억)": st.column_config.NumberColumn(format="%.2f"),
                 "은퇴 후 반토막 경험률": st.column_config.NumberColumn(format="%.1f%%"),
             },
+        )
+        st.caption(
+            "안정성 점수는 파산확률, 은퇴 후 반토막 경험률, 은퇴시점 하위 10% 자산, 최종 중앙값을 후처리로 조합한 표시용 점수입니다. "
+            "시뮬레이션 계산값 자체는 변경하지 않습니다."
         )
 
 
@@ -710,13 +884,47 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
         comp_df = pd.DataFrame(comp_data).set_index("나이")
 
         c_chart1, c_chart2 = st.columns(2)
+        color_map = {"상위 10%": "#16a34a", "중앙값": "#2563eb", "하위 10%": "#dc2626"}
+
         with c_chart1:
             st.markdown("###### 연도별 적용 수익률")
-            st.line_chart(comp_df[[c for c in comp_df.columns if "수익률" in c]], height=300)
+            fig_ret = go.Figure()
+            for label in paths.keys():
+                col_name = f"[{label}] 수익률(%)"
+                fig_ret.add_trace(
+                    go.Scatter(
+                        x=comp_df.index,
+                        y=comp_df[col_name],
+                        mode="lines",
+                        name=label,
+                        line=dict(color=color_map[label], width=2.4),
+                        hovertemplate="%{y:.2f}%<extra></extra>",
+                    )
+                )
+            fig_ret.add_hline(y=0, line_dash="dot", line_color="#64748b", line_width=1)
+            fig_ret.update_layout(yaxis_title="수익률 (%)", hovermode="x unified")
+            _styled_plotly_layout(fig_ret, height=320)
+            st.plotly_chart(fig_ret, use_container_width=True)
 
         with c_chart2:
             st.markdown("###### 연도별 현재가치 자산")
-            st.line_chart(comp_df[[c for c in comp_df.columns if "자산" in c]], height=300)
+            fig_asset = go.Figure()
+            for label in paths.keys():
+                col_name = f"[{label}] 자산(억)"
+                fig_asset.add_trace(
+                    go.Scatter(
+                        x=comp_df.index,
+                        y=comp_df[col_name],
+                        mode="lines",
+                        name=label,
+                        line=dict(color=color_map[label], width=2.4),
+                        hovertemplate="%{y:.2f}억 원<extra></extra>",
+                    )
+                )
+            fig_asset.add_hline(y=0, line_dash="solid", line_color="#64748b", line_width=1)
+            fig_asset.update_layout(yaxis_title="현재가치 자산 (억 원)", hovermode="x unified")
+            _styled_plotly_layout(fig_asset, height=320)
+            st.plotly_chart(fig_asset, use_container_width=True)
 
 
 # -----------------------------------------------------------
