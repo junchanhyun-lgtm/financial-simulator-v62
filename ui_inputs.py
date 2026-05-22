@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 
 from config import (
     ALPHA_MODEL_BASE_CAGR,
@@ -103,7 +103,7 @@ def render_applied_model_preview():
                     "의미": "추가 사용 가능액은 DWZ 기준으로 계산하고, 결과에는 안전·경고선을 함께 표시합니다.",
                 },
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -229,7 +229,7 @@ def render_input_panel():
 
             st.dataframe(
                 _build_discount_scenario_table(stock_weight, cash_weight),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "은퇴 전 수익률": st.column_config.NumberColumn(format="%.2f%%"),
@@ -312,7 +312,7 @@ def render_input_panel():
         edited_lump_df = st.data_editor(
             st.session_state.lump_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
@@ -331,7 +331,7 @@ def render_input_panel():
         edited_recur_df = st.data_editor(
             st.session_state.recur_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             column_config={
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
@@ -371,3 +371,4 @@ def render_input_panel():
         "lump_events": clean_lump_df,
         "recurring_events": clean_recur_df,
     }
+

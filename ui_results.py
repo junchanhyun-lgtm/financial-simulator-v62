@@ -1,4 +1,4 @@
-import html
+﻿import html
 
 import numpy as np
 import pandas as pd
@@ -410,7 +410,7 @@ def render_data_assumption_section():
         df = pd.DataFrame(DATA_ANALYSIS_SUMMARY)
         st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "원자료 CAGR": st.column_config.NumberColumn(format="%.2f%%"),
@@ -498,7 +498,7 @@ def render_main_asset_path_section(years, sim_assets_pv, tgt_retire, res_lump_df
     _styled_plotly_layout(fig, height=520)
 
     with st.container(border=True):
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
         st.caption("그래프의 모든 금액은 현시점 구매력 기준입니다.")
 
 
@@ -512,7 +512,7 @@ def render_failure_diagnostics_section(res):
             "파산 경로와 생존 경로를 분리해 은퇴시점 자산, 은퇴 직후 수익률, 인플레이션 쇼크, "
             "국내퀀트 페널티, 은퇴 전 순인출을 비교합니다. 결과값 자체를 바꾸지 않는 후처리 진단입니다."
         )
-        st.dataframe(diag["diagnostic_df"], use_container_width=True, hide_index=True)
+        st.dataframe(diag["diagnostic_df"], width="stretch", hide_index=True)
         st.info(diag["reason_text"])
 
 
@@ -524,7 +524,7 @@ def render_return_distribution_diagnostics_section(res):
             "하방·상방 보정률이 높으면 수익률 가정이나 변동성 가정을 재검토해야 합니다."
         )
         return_diag_df = build_return_distribution_diagnostics(res)
-        st.dataframe(return_diag_df, use_container_width=True, hide_index=True)
+        st.dataframe(return_diag_df, width="stretch", hide_index=True)
         st.info(
             "보정 전 최저·최고는 팻테일 난수가 만든 원래 값입니다. "
             "보정 후 분위수는 실제 자산 계산에 적용된 수익률 기준입니다."
@@ -609,7 +609,7 @@ def render_scenario_comparison_section(res):
 
         st.dataframe(
             display_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "안정성 점수": st.column_config.NumberColumn(format="%.1f"),
@@ -642,7 +642,7 @@ def render_sensitivity_section(res):
         )
         st.dataframe(
             sensitivity_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "파산확률": st.column_config.NumberColumn(format="%.1f%%"),
@@ -668,7 +668,7 @@ def render_sensitivity_section(res):
             xaxis_title="파산확률 변화(%p)",
         )
         _styled_plotly_layout(fig, height=380, title="기준 대비 파산확률 변화")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
 
 def render_stress_budget_section(stress_df, target_ruin):
@@ -717,7 +717,7 @@ def render_stress_budget_section(stress_df, target_ruin):
         )
         _styled_plotly_layout(fig_stress, height=330, title="추가 사용액별 파산확률")
 
-        st.plotly_chart(fig_stress, use_container_width=True)
+        st.plotly_chart(fig_stress, width="stretch")
         st.caption("추가 사용 가능액은 DWZ 방어선 기준으로 역산합니다. 모든 금액은 현재가치 기준입니다.")
 
 
@@ -834,7 +834,7 @@ def render_applied_model_section(res):
     )
 
     with st.expander("🧩 자동 적용 모델과 해석", expanded=True):
-        st.dataframe(model_df, use_container_width=True, hide_index=True)
+        st.dataframe(model_df, width="stretch", hide_index=True)
 
 
 # -----------------------------------------------------------
@@ -904,7 +904,7 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
             fig_ret.add_hline(y=0, line_dash="dot", line_color="#64748b", line_width=1)
             fig_ret.update_layout(yaxis_title="수익률 (%)", hovermode="x unified")
             _styled_plotly_layout(fig_ret, height=320)
-            st.plotly_chart(fig_ret, use_container_width=True)
+            st.plotly_chart(fig_ret, width="stretch")
 
         with c_chart2:
             st.markdown("###### 연도별 현재가치 자산")
@@ -924,7 +924,7 @@ def render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_r
             fig_asset.add_hline(y=0, line_dash="solid", line_color="#64748b", line_width=1)
             fig_asset.update_layout(yaxis_title="현재가치 자산 (억 원)", hovermode="x unified")
             _styled_plotly_layout(fig_asset, height=320)
-            st.plotly_chart(fig_asset, use_container_width=True)
+            st.plotly_chart(fig_asset, width="stretch")
 
 
 # -----------------------------------------------------------
@@ -964,3 +964,4 @@ def render_results_page(res):
 
     with advanced_tab:
         render_representative_paths_section(years, sim_assets_pv, sim_returns, tgt_retire)
+

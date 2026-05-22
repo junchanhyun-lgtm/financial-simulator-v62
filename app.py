@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 
 from config import N_SIMULATIONS, SEARCH_SIMULATIONS
 from ui_inputs import render_input_panel
@@ -21,7 +21,7 @@ def main():
     dwz_mode = input_values["dwz_mode"]
     clean_lump_df = input_values["lump_events"]
 
-    if st.button("🚀 5,000회 연산 및 정밀 스트레스 테스트 시작", type="primary", use_container_width=True):
+    if st.button("🚀 5,000회 연산 및 정밀 스트레스 테스트 시작", type="primary", width="stretch"):
         st.divider()
         params = build_simulation_params(input_values)
 
@@ -68,3 +68,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
