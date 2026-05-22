@@ -86,7 +86,7 @@ def render_page_layout():
 
         div[data-testid="stDataFrame"] {
             border-radius: 14px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 5px 16px rgba(15, 23, 42, 0.04);
         }
 

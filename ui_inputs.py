@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 
 from config import (
     ALPHA_MODEL_BASE_CAGR,
@@ -43,6 +43,26 @@ from data_defaults import get_default_lump_events, get_default_recurring_events
 def _drop_model_columns_for_editor(df):
     """입력 UI에서는 내부 모델용 물가연동 컬럼을 노출하지 않습니다."""
     return df.drop(columns=["물가연동"], errors="ignore")
+
+
+def _with_delete_column(df):
+    """이벤트 편집표에 명시적인 삭제 체크 컬럼을 추가합니다."""
+    editor_df = df.copy().reset_index(drop=True)
+    if "삭제" not in editor_df.columns:
+        editor_df.insert(0, "삭제", False)
+    editor_df["삭제"] = editor_df["삭제"].fillna(False).astype(bool)
+    return editor_df
+
+
+def _finalize_event_editor_df(df, required_columns):
+    """삭제 체크 행과 미완성 행을 제거하고 세션 상태에 저장할 표를 반환합니다."""
+    clean_df = df.copy()
+    if "삭제" in clean_df.columns:
+        delete_mask = clean_df["삭제"].fillna(False).astype(bool)
+        clean_df = clean_df.loc[~delete_mask].drop(columns=["삭제"], errors="ignore")
+
+    clean_df = clean_df.dropna(subset=required_columns)
+    return clean_df.reset_index(drop=True)
 
 
 def _build_discount_scenario_table(stock_weight, cash_weight):
@@ -309,18 +329,31 @@ def render_input_panel():
         if "lump_df" not in st.session_state:
             st.session_state.lump_df = get_default_lump_events()
 
+        st.caption(
+            "행 삭제는 왼쪽 행 선택 후 Delete 키를 누르거나, `삭제` 체크박스를 선택하면 됩니다."
+        )
         edited_lump_df = st.data_editor(
-            st.session_state.lump_df,
+            _with_delete_column(st.session_state.lump_df),
             num_rows="dynamic",
             width="stretch",
+            key="lump_event_editor",
+            column_order=["삭제", "나이", "유형", "내용", "금액(만원)"],
             column_config={
+                "삭제": st.column_config.CheckboxColumn(
+                    "삭제",
+                    help="체크한 행은 시뮬레이션 입력에서 제외됩니다.",
+                ),
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
                     options=["수입", "지출"],
-                )
+                ),
             },
         )
-        clean_lump_df = edited_lump_df.dropna(subset=["나이", "유형", "금액(만원)"])
+        clean_lump_df = _finalize_event_editor_df(
+            edited_lump_df,
+            required_columns=["나이", "유형", "금액(만원)"],
+        )
+        st.session_state.lump_df = clean_lump_df
 
     with tab2:
         if "recur_df" not in st.session_state:
@@ -328,11 +361,28 @@ def render_input_panel():
                 get_default_recurring_events()
             )
 
+        st.caption(
+            "행 삭제는 왼쪽 행 선택 후 Delete 키를 누르거나, `삭제` 체크박스를 선택하면 됩니다."
+        )
         edited_recur_df = st.data_editor(
-            st.session_state.recur_df,
+            _with_delete_column(st.session_state.recur_df),
             num_rows="dynamic",
             width="stretch",
+            key="recurring_event_editor",
+            column_order=[
+                "삭제",
+                "시작나이",
+                "기간(년)",
+                "유형",
+                "내용",
+                "월금액(만원)",
+                "확정연금",
+            ],
             column_config={
+                "삭제": st.column_config.CheckboxColumn(
+                    "삭제",
+                    help="체크한 행은 시뮬레이션 입력에서 제외됩니다.",
+                ),
                 "유형": st.column_config.SelectboxColumn(
                     "유형",
                     options=["수입", "지출"],
@@ -343,9 +393,11 @@ def render_input_panel():
                 ),
             },
         )
-        clean_recur_df = edited_recur_df.dropna(
-            subset=["시작나이", "기간(년)", "유형", "월금액(만원)"]
+        clean_recur_df = _finalize_event_editor_df(
+            edited_recur_df,
+            required_columns=["시작나이", "기간(년)", "유형", "월금액(만원)"],
         )
+        st.session_state.recur_df = clean_recur_df
 
     return {
         "current_age": current_age,
@@ -371,4 +423,3 @@ def render_input_panel():
         "lump_events": clean_lump_df,
         "recurring_events": clean_recur_df,
     }
-
